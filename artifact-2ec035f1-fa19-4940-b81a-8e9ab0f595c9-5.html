@@ -1,0 +1,597 @@
+
+                        <!DOCTYPE html>
+                        <html lang="en">
+                        <head>
+                            <meta charset="UTF-8">
+                            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+							<style>
+								body {
+									background-color: white; /* Ensure the iframe has a white background */
+								}
+
+								
+							</style>
+                        </head>
+                        <body>
+                            <!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<title>Turnaround Progress Dashboard</title>
+<style>
+  :root{
+    --bg:#0b1b23; --panel:#102a33; --panel2:#153640; --border:#20424d;
+    --text:#e6f1f3; --muted:#8fb0b6; --teal:#2dd4bf; --teal-dark:#0f766e;
+    --amber:#f59e0b; --green:#22c55e; --red:#ef4444;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0; font-family:"Segoe UI",Tahoma,Arial,sans-serif;
+    background:var(--bg); color:var(--text); padding:18px 22px 40px;
+  }
+  h1{font-size:20px;margin:0 0 4px;}
+  h3{font-size:14px;color:var(--text);margin:22px 0 10px;}
+  .caption{color:var(--muted);font-size:12px;margin-bottom:14px;display:flex;gap:14px;align-items:center;flex-wrap:wrap;}
+  button{
+    background:var(--teal-dark); color:white; border:none; padding:7px 14px;
+    border-radius:6px; cursor:pointer; font-size:12px;
+  }
+  button.secondary{background:var(--panel2); color:var(--teal);}
+  button:hover{filter:brightness(1.1);}
+  input[type=file]{color:var(--muted); font-size:12px;}
+
+  .toolbar{
+    display:flex; gap:10px; flex-wrap:wrap; align-items:center;
+    background:var(--panel); border:1px solid var(--border); border-radius:10px;
+    padding:12px 14px; margin-bottom:16px;
+  }
+  .filters{display:flex; gap:12px; flex-wrap:wrap; margin-bottom:16px;}
+  .filter-group{display:flex; flex-direction:column; gap:4px;}
+  .filter-group label{font-size:10px; color:var(--muted); text-transform:uppercase; letter-spacing:.03em;}
+  select{
+    background:var(--panel); color:var(--text); border:1px solid var(--border);
+    padding:7px 10px; border-radius:6px; font-size:12px; min-width:170px;
+  }
+
+  .kpi-row{display:flex; gap:12px; flex-wrap:wrap; margin-bottom:18px;}
+  .kpi-card{
+    background:var(--panel); border:1px solid var(--border); border-radius:10px;
+    padding:14px 18px; min-width:140px; flex:1 1 140px;
+  }
+  .kpi-card .value{font-size:26px; font-weight:700; color:var(--teal);}
+  .kpi-card .label{font-size:11px; color:var(--muted); margin-top:2px;}
+  .kpi-card.ahead .value{color:var(--green);}
+  .kpi-card.ontrack .value{color:var(--teal);}
+  .kpi-card.behind .value{color:var(--red);}
+
+  .chart-wrap{
+    background:var(--panel); border:1px solid var(--border); border-radius:10px;
+    padding:14px; margin-bottom:20px; position:relative; height:340px;
+  }
+  .chart-head{display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;}
+  .chart-head span{font-size:12px; color:var(--muted);}
+
+  .table-wrap{
+    background:var(--panel); border:1px solid var(--border); border-radius:10px;
+    overflow:auto; max-height:420px;
+  }
+  table{width:100%; border-collapse:collapse; font-size:12.5px;}
+  th,td{padding:8px 10px; text-align:left; border-bottom:1px solid var(--border); white-space:nowrap;}
+  th{background:var(--panel2); color:var(--muted); position:sticky; top:0; font-weight:600;}
+  tr:hover td{background:#123038;}
+  .status-ahead{color:var(--green); font-weight:600;}
+  .status-ontrack{color:var(--teal); font-weight:600;}
+  .status-behind{color:var(--red); font-weight:700;}
+  .status-neutral{color:var(--muted);}
+  .empty-note{color:var(--muted); font-size:12px; padding:16px;}
+
+  .badge{
+    display:inline-block; padding:2px 8px; border-radius:999px; font-size:10px;
+    background:var(--panel2); color:var(--teal); border:1px solid var(--border);
+  }
+
+  footer{color:var(--muted); font-size:10.5px; margin-top:26px; text-align:center;}
+</style>
+</head>
+<body>
+
+  <h1>Turnaround Progress Dashboard</h1>
+  <div class="caption">
+    <span id="lastUpdated">ยังไม่มีข้อมูล — โหลดไฟล์ CSV หรือกดโหลดข้อมูลตัวอย่าง</span>
+    <span class="badge" id="jobCountBadge">0 งาน</span>
+  </div>
+
+  <div class="toolbar">
+    <div>
+      <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px;">
+        อัปโหลดไฟล์ CSV (export ชีท Sch.Plan จาก Excel/Google Sheets เป็น CSV แล้วอัปโหลดที่นี่)
+      </label>
+      <input type="file" id="csvInput" accept=".csv,text/csv">
+    </div>
+    <button class="secondary" id="demoBtn">โหลดข้อมูลตัวอย่าง (Demo)</button>
+    <button class="secondary" id="refreshBtn">รีเฟรชมุมมอง</button>
+  </div>
+
+  <div class="filters">
+    <div class="filter-group">
+      <label>Section / พื้นที่</label>
+      <select id="sectionFilter"><option value="ALL">ทั้งหมด</option></select>
+    </div>
+    <div class="filter-group">
+      <label>ประเภทงาน</label>
+      <select id="typeFilter"><option value="ALL">ทั้งหมด</option></select>
+    </div>
+    <div class="filter-group">
+      <label>สถานะ</label>
+      <select id="statusFilter">
+        <option value="ALL">ทั้งหมด</option>
+        <option value="ahead">เร็วกว่าแผน</option>
+        <option value="ontrack">ตามแผน</option>
+        <option value="behind">ล่าช้า</option>
+      </select>
+    </div>
+  </div>
+
+  <div class="kpi-row" id="kpiRow"></div>
+
+  <div class="chart-wrap">
+    <div class="chart-head">
+      <strong style="font-size:13px;">S-Curve: แผนงาน</strong>
+      <span id="chartScopeLabel">ภาพรวมทั้งหมด</span>
+    </div>
+    <canvas id="sCurveChart"></canvas>
+  </div>
+
+  <h3>⚠ งานที่ล่าช้ากว่าแผน</h3>
+  <div class="table-wrap">
+    <table id="delayTable">
+      <thead><tr>
+        <th>TAG</th><th>ประเภท</th><th>ชื่องาน</th><th>Section</th>
+        <th>Finish แผน</th><th>จริง %</th><th>ควรเป็น %</th><th>ส่วนต่าง</th>
+      </tr></thead>
+      <tbody></tbody>
+    </table>
+    <div class="empty-note" id="delayEmptyNote" style="display:none;">ไม่มีงานล่าช้าในขอบเขตนี้</div>
+  </div>
+
+  <h3>รายการงานทั้งหมด</h3>
+  <div class="table-wrap">
+    <table id="jobTable">
+      <thead><tr>
+        <th>TAG</th><th>ประเภท</th><th>ชื่องาน</th><th>%</th>
+        <th>Start</th><th>Finish</th><th>สถานะ</th>
+      </tr></thead>
+      <tbody></tbody>
+    </table>
+    <div class="empty-note" id="jobEmptyNote" style="display:none;">ยังไม่มีข้อมูล — อัปโหลด CSV หรือกดโหลดข้อมูลตัวอย่าง</div>
+  </div>
+
+  <footer>Turnaround Progress Dashboard — ไฟล์ HTML นี้ทำงานทั้งหมดในเบราว์เซอร์ ไม่มีการส่งข้อมูลออกไปที่ใด</footer>
+
+<script src="/static/libraries/chart.js/4.5.1/chart.umd.js"></script>
+<script>
+(function(){
+  "use strict";
+
+  // ============================================================
+  // ------------------- Column name matching -------------------
+  // ============================================================
+  const FIELD_SYNONYMS = {
+    work_type: ["work type", "worktype", "ประเภทงาน", "ประเภท"],
+    section:   ["section", "sec."],
+    tag:       ["tag"],
+    desc:      ["description", "desc", "รายละเอียด"],
+    percent:   ["% complete", "percent", "pct", "complete"],
+    start:     ["start"],
+    finish:    ["finish"],
+  };
+  const UNSPECIFIED_TYPE = "ไม่ระบุประเภท";
+
+  function normHeader(text){
+    if (text === null || text === undefined) return "";
+    return String(text).replace(/\n/g," ").trim().toLowerCase().replace(/\s+/g," ");
+  }
+
+  function detectHeaderAndColumns(rows){
+    let headerRow = -1;
+    for (let r=0; r<Math.min(10, rows.length); r++){
+      for (let c=0; c<rows[r].length; c++){
+        if (normHeader(rows[r][c]).indexOf("tag") !== -1){ headerRow = r; break; }
+      }
+      if (headerRow !== -1) break;
+    }
+    if (headerRow === -1) headerRow = 0;
+    const colMap = {}; Object.keys(FIELD_SYNONYMS).forEach(f => colMap[f] = -1);
+    const header = rows[headerRow] || [];
+    for (let c=0; c<header.length; c++){
+      const norm = normHeader(header[c]);
+      if (!norm) continue;
+      for (const field in FIELD_SYNONYMS){
+        if (colMap[field] !== -1) continue;
+        if (FIELD_SYNONYMS[field].some(kw => norm.indexOf(kw) !== -1)) colMap[field] = c;
+      }
+    }
+    return { headerRow, colMap };
+  }
+
+  // ============================================================
+  // ------------------------- CSV parsing ------------------------
+  // ============================================================
+  function parseCSV(text){
+    const rows = [];
+    let row = [], field = "", inQuotes = false;
+    for (let i=0; i<text.length; i++){
+      const ch = text[i], next = text[i+1];
+      if (inQuotes){
+        if (ch === '"' && next === '"'){ field += '"'; i++; }
+        else if (ch === '"'){ inQuotes = false; }
+        else field += ch;
+      } else {
+        if (ch === '"'){ inQuotes = true; }
+        else if (ch === ','){ row.push(field); field = ""; }
+        else if (ch === '\r'){ /* skip */ }
+        else if (ch === '\n'){ row.push(field); rows.push(row); row = []; field = ""; }
+        else field += ch;
+      }
+    }
+    if (field.length || row.length){ row.push(field); rows.push(row); }
+    return rows.filter(r => r.some(c => String(c).trim() !== ""));
+  }
+
+  function parseDateValue(raw){
+    if (raw === null || raw === undefined || raw === "") return null;
+    if (raw instanceof Date) return isNaN(raw) ? null : raw;
+    const s = String(raw).trim();
+    if (!s) return null;
+    // try native parse first (handles YYYY-MM-DD, YYYY-MM-DDTHH:mm:ss, etc.)
+    let d = new Date(s.replace(" ", "T"));
+    if (!isNaN(d)) return d;
+    // try DD/MM/YYYY [HH:mm:ss]
+    const m = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})(?:[ T](\d{1,2}):(\d{2})(?::(\d{2}))?)?$/);
+    if (m){
+      let [, dd, mm, yyyy, hh, mi, ss] = m;
+      if (yyyy.length === 2) yyyy = "20" + yyyy;
+      d = new Date(+yyyy, +mm - 1, +dd, +(hh||0), +(mi||0), +(ss||0));
+      if (!isNaN(d)) return d;
+    }
+    return null;
+  }
+
+  function toPct(raw){
+    if (raw === null || raw === undefined || raw === "") return 0;
+    const v = parseFloat(String(raw).replace("%","").trim());
+    if (isNaN(v)) return 0;
+    return v <= 1 ? v * 100 : v;
+  }
+
+  function getWorkType(raw){
+    if (raw === null || raw === undefined) return UNSPECIFIED_TYPE;
+    const text = String(raw).trim();
+    return text ? text : UNSPECIFIED_TYPE;
+  }
+
+  // ============================================================
+  // ------------------- Build job hierarchy ----------------------
+  // ============================================================
+  function buildJobs(rows){
+    const { headerRow, colMap } = detectHeaderAndColumns(rows);
+    const jobs = [];
+    let current = null;
+    for (let r = headerRow + 1; r < rows.length; r++){
+      const row = rows[r];
+      const tag  = colMap.tag  !== -1 ? row[colMap.tag]  : null;
+      const desc = colMap.desc !== -1 ? row[colMap.desc] : null;
+      const tagStr = tag !== null && tag !== undefined ? String(tag).trim() : "";
+      const descStr = desc !== null && desc !== undefined ? String(desc).trim() : "";
+
+      if (tagStr){
+        const section = colMap.section !== -1 ? row[colMap.section] : null;
+        const workTypeRaw = colMap.work_type !== -1 ? row[colMap.work_type] : null;
+        const pctRaw = colMap.percent !== -1 ? row[colMap.percent] : null;
+        const start = colMap.start !== -1 ? parseDateValue(row[colMap.start]) : null;
+        const finish = colMap.finish !== -1 ? parseDateValue(row[colMap.finish]) : null;
+        current = {
+          section: section !== null && section !== undefined && String(section).trim() !== "" ? String(section).trim() : "",
+          tag: tagStr, desc: descStr, ownPercent: toPct(pctRaw),
+          start, finish, workType: getWorkType(workTypeRaw), steps: []
+        };
+        jobs.push(current);
+      } else if (descStr && current){
+        const pctRaw = colMap.percent !== -1 ? row[colMap.percent] : null;
+        current.steps.push({ desc: descStr, percent: toPct(pctRaw) });
+      }
+    }
+    jobs.forEach(j => {
+      j.percent = j.steps.length
+        ? weightedAvg(j.steps.map(s => [s.percent, 1]))
+        : j.ownPercent;
+    });
+    return jobs;
+  }
+
+  // ============================================================
+  // --------------------------- Helpers --------------------------
+  // ============================================================
+  function weightedAvg(pairs){
+    let tw = 0, s = 0;
+    pairs.forEach(([v,w]) => { tw += w; s += v*w; });
+    return tw === 0 ? 0 : s / tw;
+  }
+  function durationDays(start, finish){
+    if (!start || !finish) return 1;
+    const d = (finish - start) / 86400000;
+    return d > 0 ? d : 1;
+  }
+  function progressFrac(start, finish, asOf){
+    if (!start || !finish) return 0;
+    if (finish <= start) return asOf >= start ? 1 : 0;
+    if (asOf <= start) return 0;
+    if (asOf >= finish) return 1;
+    return (asOf - start) / (finish - start);
+  }
+  function statusOf(job){
+    if (!job.start || !job.finish) return { label: "ไม่มีแผน", cls: "neutral" };
+    const expected = progressFrac(job.start, job.finish, new Date()) * 100;
+    const diff = job.percent - expected;
+    if (diff >= 5) return { label: "เร็วกว่าแผน", cls: "ahead" };
+    if (diff <= -5) return { label: "ล่าช้า", cls: "behind" };
+    return { label: "ตามแผน", cls: "ontrack" };
+  }
+  function fmtDate(d){
+    if (!d) return "-";
+    const yyyy = d.getFullYear(), mm = String(d.getMonth()+1).padStart(2,"0"), dd = String(d.getDate()).padStart(2,"0");
+    return `${yyyy}-${mm}-${dd}`;
+  }
+  function escapeHtml(s){
+    return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  }
+
+  // ============================================================
+  // ------------------------- Demo data ---------------------------
+  // ============================================================
+  function buildDemoJobs(){
+    const today = new Date();
+    function daysFromNow(n){ const d = new Date(today); d.setDate(d.getDate()+n); d.setHours(8,0,0,0); return d; }
+    const defs = [
+      ["500","PM","D-3106A","PM 3Y HPWJ & Inspec CATL.Drum",-10,2,62],
+      ["500","Cleaning","D-3106B","PM 3Y HPWJ Cleaning / Change demister",-8,4,40],
+      ["100","Cleaning","D-3103","Water jet cleaning pot + line vent to ATM",-6,3,20],
+      ["200","Change line","R-3201","PM 1Y Change line slurry TK-Feed",-4,5,8],
+      ["300","Weld","D-3304","PM 3Y HPWJ Cleaning / Change demister",-2,6,2],
+      ["300","Cutting","E-3303","PM 1Y Drop & HPWJ Exchanger scrubber",0,8,0],
+      ["400","Confine","T-3301","PM 3Y Cleaning & Inspec tray 23 Set",2,5,0],
+      ["500","PM","T-3503A","PM 6Y Change molecular sieve",-14,1,95],
+      ["700","Cleaning","F-216","Cleaning F216",-12,2,78],
+      ["200","Cleaning","E-236B","Clean and Inspection",-9,3,55],
+    ];
+    return defs.map(([section, workType, tag, desc, startOffset, durDays, pct]) => ({
+      section, workType, tag, desc,
+      start: daysFromNow(startOffset),
+      finish: (() => { const f = daysFromNow(startOffset + durDays); f.setHours(20,0,0,0); return f; })(),
+      ownPercent: pct, percent: pct, steps: []
+    }));
+  }
+
+  // ============================================================
+  // ---------------------------- State -----------------------------
+  // ============================================================
+  let jobs = [];
+  let chartInstance = null;
+
+  const sectionFilterEl = document.getElementById("sectionFilter");
+  const typeFilterEl = document.getElementById("typeFilter");
+  const statusFilterEl = document.getElementById("statusFilter");
+
+  function populateFilters(){
+    const sections = [...new Set(jobs.map(j => j.section).filter(Boolean))].sort();
+    const types = [...new Set(jobs.map(j => j.workType).filter(Boolean))].sort();
+    sectionFilterEl.innerHTML = '<option value="ALL">ทั้งหมด</option>' +
+      sections.map(s => `<option value="${escapeHtml(s)}">${escapeHtml(s)}</option>`).join("");
+    typeFilterEl.innerHTML = '<option value="ALL">ทั้งหมด</option>' +
+      types.map(t => `<option value="${escapeHtml(t)}">${escapeHtml(t)}</option>`).join("");
+  }
+
+  function getScope(){
+    const sectionF = sectionFilterEl.value, typeF = typeFilterEl.value, statusF = statusFilterEl.value;
+    let scope = jobs;
+    if (sectionF !== "ALL") scope = scope.filter(j => j.section === sectionF);
+    if (typeF !== "ALL") scope = scope.filter(j => j.workType === typeF);
+    const display = statusF === "ALL" ? scope : scope.filter(j => statusOf(j).cls === statusF);
+    return { scope, display, sectionF, typeF, statusF };
+  }
+
+  function renderKpis(scope, display){
+    const overallPct = jobs.length ? weightedAvg(jobs.map(j => [j.percent, durationDays(j.start, j.finish)])) : 0;
+    const scopePct = display.length ? weightedAvg(display.map(j => [j.percent, durationDays(j.start, j.finish)])) : 0;
+    const ahead = scope.filter(j => statusOf(j).cls === "ahead").length;
+    const ontrack = scope.filter(j => statusOf(j).cls === "ontrack").length;
+    const behind = scope.filter(j => statusOf(j).cls === "behind").length;
+
+    document.getElementById("kpiRow").innerHTML = `
+      <div class="kpi-card"><div class="value">${Math.round(overallPct)}%</div><div class="label">รวมทั้งหมด (${jobs.length} งาน)</div></div>
+      <div class="kpi-card"><div class="value">${Math.round(scopePct)}%</div><div class="label">ในขอบเขตที่เลือก (${display.length} งาน)</div></div>
+      <div class="kpi-card ahead"><div class="value">${ahead}</div><div class="label">เร็วกว่าแผน</div></div>
+      <div class="kpi-card ontrack"><div class="value">${ontrack}</div><div class="label">ตามแผน</div></div>
+      <div class="kpi-card behind"><div class="value">${behind}</div><div class="label">ล่าช้า</div></div>
+    `;
+    document.getElementById("jobCountBadge").innerText = `${jobs.length} งาน`;
+  }
+
+  function renderChart(scope, sectionF, typeF){
+    const dated = scope.filter(j => j.start && j.finish);
+    const labelParts = [];
+    if (sectionF !== "ALL") labelParts.push("Section: " + sectionF);
+    if (typeF !== "ALL") labelParts.push("ประเภท: " + typeF);
+    document.getElementById("chartScopeLabel").innerText = labelParts.length ? labelParts.join(" • ") : "ภาพรวมทั้งหมด";
+
+    const ctx = document.getElementById("sCurveChart").getContext("2d");
+    if (chartInstance){ chartInstance.destroy(); chartInstance = null; }
+
+    if (!dated.length){
+      return;
+    }
+    const minStart = new Date(Math.min(...dated.map(j => j.start.getTime())));
+    const maxEnd = new Date(Math.max(...dated.map(j => j.finish.getTime())));
+    const totalDays = Math.max(1, Math.round((maxEnd - minStart) / 86400000));
+    const stepDays = totalDays > 60 ? Math.ceil(totalDays / 60) : 1;
+
+    const labels = [];
+    const planValues = [];
+    for (let t = minStart.getTime(); t <= maxEnd.getTime(); t += stepDays * 86400000){
+      const dt = new Date(t);
+      labels.push(fmtDate(dt));
+      const planVal = weightedAvg(scope.map(j => [progressFrac(j.start, j.finish, dt) * 100, durationDays(j.start, j.finish)]));
+      planValues.push(Math.round(planVal * 10) / 10);
+    }
+    // ensure last point reaches maxEnd exactly
+    if (labels[labels.length-1] !== fmtDate(maxEnd)){
+      labels.push(fmtDate(maxEnd));
+      const planVal = weightedAvg(scope.map(j => [progressFrac(j.start, j.finish, maxEnd) * 100, durationDays(j.start, j.finish)]));
+      planValues.push(Math.round(planVal * 10) / 10);
+    }
+
+    const todayIdx = labels.findIndex(l => l === fmtDate(new Date()));
+
+    chartInstance = new Chart(ctx, {
+      type: "line",
+      data: {
+        labels,
+        datasets: [{
+          label: "แผน (Plan)",
+          data: planValues,
+          borderColor: "#2dd4bf",
+          borderDash: [6,4],
+          backgroundColor: "rgba(45,212,191,0.08)",
+          fill: true,
+          tension: 0.15,
+          pointRadius: 0,
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        scales: {
+          y: { min:0, max:100, ticks:{ color:"#8fb0b6" }, grid:{ color:"#1c3a43" } },
+          x: { ticks:{ color:"#8fb0b6", maxTicksLimit:14 }, grid:{ color:"#1c3a43" } },
+        },
+        plugins: {
+          legend: { labels:{ color:"#e6f1f3" } },
+        }
+      }
+    });
+  }
+
+  function renderDelayTable(scope){
+    const delayed = scope.filter(j => statusOf(j).cls === "behind");
+    const tbody = document.querySelector("#delayTable tbody");
+    const emptyNote = document.getElementById("delayEmptyNote");
+    if (!delayed.length){
+      tbody.innerHTML = "";
+      emptyNote.style.display = "block";
+      return;
+    }
+    emptyNote.style.display = "none";
+    tbody.innerHTML = delayed.map(j => {
+      const expected = Math.round(progressFrac(j.start, j.finish, new Date()) * 100);
+      const gap = Math.round(j.percent - expected);
+      return `<tr>
+        <td>${escapeHtml(j.tag)}</td><td>${escapeHtml(j.workType)}</td>
+        <td>${escapeHtml(j.desc.slice(0,55))}</td><td>${escapeHtml(j.section)}</td>
+        <td>${fmtDate(j.finish)}</td><td>${Math.round(j.percent)}%</td>
+        <td>${expected}%</td><td class="status-behind">${gap}%</td>
+      </tr>`;
+    }).join("");
+  }
+
+  function renderJobTable(display){
+    const tbody = document.querySelector("#jobTable tbody");
+    const emptyNote = document.getElementById("jobEmptyNote");
+    if (!display.length){
+      tbody.innerHTML = "";
+      emptyNote.style.display = "block";
+      return;
+    }
+    emptyNote.style.display = "none";
+    tbody.innerHTML = display.map(j => {
+      const st = statusOf(j);
+      return `<tr>
+        <td>${escapeHtml(j.tag)}</td><td>${escapeHtml(j.workType)}</td>
+        <td>${escapeHtml(j.desc.slice(0,70))}</td><td>${Math.round(j.percent)}%</td>
+        <td>${fmtDate(j.start)}</td><td>${fmtDate(j.finish)}</td>
+        <td class="status-${st.cls}">${st.label}</td>
+      </tr>`;
+    }).join("");
+  }
+
+  function render(){
+    const { scope, display, sectionF, typeF } = getScope();
+    renderKpis(scope, display);
+    renderChart(scope, sectionF, typeF);
+    renderDelayTable(scope);
+    renderJobTable(display);
+  }
+
+  function loadJobs(newJobs, sourceLabel){
+    jobs = newJobs;
+    populateFilters();
+    sectionFilterEl.value = "ALL";
+    typeFilterEl.value = "ALL";
+    statusFilterEl.value = "ALL";
+    document.getElementById("lastUpdated").innerText =
+      `โหลดข้อมูลจาก: ${sourceLabel} • ${new Date().toLocaleString("th-TH")}`;
+    render();
+  }
+
+  // ============================================================
+  // ---------------------------- Events ------------------------------
+  // ============================================================
+  document.getElementById("demoBtn").addEventListener("click", () => {
+    loadJobs(buildDemoJobs(), "ข้อมูลตัวอย่าง (Demo)");
+  });
+
+  document.getElementById("csvInput").addEventListener("change", (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      try {
+        const rows = parseCSV(ev.target.result);
+        const parsed = buildJobs(rows);
+        if (!parsed.length){
+          alert("ไม่พบข้อมูลงาน (TAG) ในไฟล์นี้ — ตรวจสอบว่า export มาจากชีท Sch.Plan และมีคอลัมน์ TAG อยู่");
+          return;
+        }
+        loadJobs(parsed, file.name);
+      } catch(err){
+        alert("อ่านไฟล์ไม่สำเร็จ: " + err.message);
+      }
+    };
+    reader.readAsText(file, "UTF-8");
+  });
+
+  [sectionFilterEl, typeFilterEl, statusFilterEl].forEach(el => el.addEventListener("change", render));
+  document.getElementById("refreshBtn").addEventListener("click", render);
+
+  // ---- responsive resize handling ----
+  let resizeTimer;
+  window.addEventListener("resize", () => {
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(() => {
+      if (chartInstance) chartInstance.resize();
+    }, 150);
+  });
+
+  // ---- initial state: load demo data so the dashboard isn't empty ----
+  loadJobs(buildDemoJobs(), "ข้อมูลตัวอย่าง (Demo)");
+
+})();
+</script>
+</body>
+</html>
+
+							<script>
+                            	
+							</script>
+                        </body>
+                        </html>
+                    
