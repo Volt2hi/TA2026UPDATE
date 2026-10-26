@@ -1,19 +1,4 @@
-
-                        <!DOCTYPE html>
-                        <html lang="en">
-                        <head>
-                            <meta charset="UTF-8">
-                            <meta name="viewport" content="width=device-width, initial-scale=1.0">
-							<style>
-								body {
-									background-color: white; /* Ensure the iframe has a white background */
-								}
-
-								
-							</style>
-                        </head>
-                        <body>
-                            <!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="th">
 <head>
 <meta charset="UTF-8">
@@ -32,13 +17,15 @@
   h1{font-size:20px;margin:0 0 4px;}
   h3{font-size:14px;color:var(--text);margin:22px 0 10px;}
   .caption{color:var(--muted);font-size:12px;margin-bottom:14px;display:flex;gap:14px;align-items:center;flex-wrap:wrap;}
+  .status-dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--green);margin-right:6px;}
+  .status-dot.stale{background:var(--amber);}
+  .status-dot.error{background:var(--red);}
   button{
     background:var(--teal-dark); color:white; border:none; padding:7px 14px;
     border-radius:6px; cursor:pointer; font-size:12px;
   }
   button.secondary{background:var(--panel2); color:var(--teal);}
   button:hover{filter:brightness(1.1);}
-  input[type=file]{color:var(--muted); font-size:12px;}
 
   .toolbar{
     display:flex; gap:10px; flex-wrap:wrap; align-items:center;
@@ -89,6 +76,10 @@
     display:inline-block; padding:2px 8px; border-radius:999px; font-size:10px;
     background:var(--panel2); color:var(--teal); border:1px solid var(--border);
   }
+  .error-banner{
+    background:#3a1414; border:1px solid var(--red); color:#fecaca;
+    padding:10px 14px; border-radius:8px; font-size:12px; margin-bottom:16px; display:none;
+  }
 
   footer{color:var(--muted); font-size:10.5px; margin-top:26px; text-align:center;}
 </style>
@@ -97,19 +88,18 @@
 
   <h1>Turnaround Progress Dashboard</h1>
   <div class="caption">
-    <span id="lastUpdated">ยังไม่มีข้อมูล — โหลดไฟล์ CSV หรือกดโหลดข้อมูลตัวอย่าง</span>
+    <span><span class="status-dot" id="statusDot"></span><span id="lastUpdated">กำลังโหลดข้อมูล...</span></span>
     <span class="badge" id="jobCountBadge">0 งาน</span>
   </div>
 
+  <div class="error-banner" id="errorBanner"></div>
+
   <div class="toolbar">
-    <div>
-      <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px;">
-        อัปโหลดไฟล์ CSV (export ชีท Sch.Plan จาก Excel/Google Sheets เป็น CSV แล้วอัปโหลดที่นี่)
-      </label>
-      <input type="file" id="csvInput" accept=".csv,text/csv">
-    </div>
-    <button class="secondary" id="demoBtn">โหลดข้อมูลตัวอย่าง (Demo)</button>
-    <button class="secondary" id="refreshBtn">รีเฟรชมุมมอง</button>
+    <span style="font-size:12px;color:var(--muted);">
+      ข้อมูลดึงจากไฟล์ <code>data.csv</code> ในที่เก็บเดียวกันโดยอัตโนมัติ และรีเฟรชทุก 30 วินาที —
+      ไม่ต้องอัปโหลดอะไร เพียงรอให้ผู้ดูแลอัปเดตไฟล์
+    </span>
+    <button class="secondary" id="refreshBtn">รีเฟรชตอนนี้</button>
   </div>
 
   <div class="filters">
@@ -163,15 +153,22 @@
       </tr></thead>
       <tbody></tbody>
     </table>
-    <div class="empty-note" id="jobEmptyNote" style="display:none;">ยังไม่มีข้อมูล — อัปโหลด CSV หรือกดโหลดข้อมูลตัวอย่าง</div>
+    <div class="empty-note" id="jobEmptyNote" style="display:none;">ยังไม่มีข้อมูล</div>
   </div>
 
-  <footer>Turnaround Progress Dashboard — ไฟล์ HTML นี้ทำงานทั้งหมดในเบราว์เซอร์ ไม่มีการส่งข้อมูลออกไปที่ใด</footer>
+  <footer>Turnaround Progress Dashboard — ข้อมูลอัปเดตโดยทีมผู้ดูแลเท่านั้น ผู้เข้าชมไม่ต้องทำอะไรเพิ่ม</footer>
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.5.1/dist/chart.umd.min.js"></script>
 <script>
 (function(){
   "use strict";
+
+  // ============================================================
+  // ---------------- แก้ตรงนี้ถ้าเปลี่ยนชื่อไฟล์ข้อมูล ----------------
+  // ============================================================
+  const DATA_URL = "data.csv";       // ไฟล์ CSV ที่ผู้ดูแลอัปโหลดทับใน repo เดียวกัน
+  const POLL_INTERVAL_MS = 30000;    // รีเฟรชข้อมูลอัตโนมัติทุก 30 วินาที
+  const STALE_AFTER_MS = 1000 * 60 * 60 * 6; // ถ้าไฟล์ไม่เปลี่ยนเกิน 6 ชม. ให้ขึ้นจุดเตือนสีเหลือง
 
   // ============================================================
   // ------------------- Column name matching -------------------
@@ -240,13 +237,10 @@
 
   function parseDateValue(raw){
     if (raw === null || raw === undefined || raw === "") return null;
-    if (raw instanceof Date) return isNaN(raw) ? null : raw;
     const s = String(raw).trim();
     if (!s) return null;
-    // try native parse first (handles YYYY-MM-DD, YYYY-MM-DDTHH:mm:ss, etc.)
     let d = new Date(s.replace(" ", "T"));
     if (!isNaN(d)) return d;
-    // try DD/MM/YYYY [HH:mm:ss]
     const m = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})(?:[ T](\d{1,2}):(\d{2})(?::(\d{2}))?)?$/);
     if (m){
       let [, dd, mm, yyyy, hh, mi, ss] = m;
@@ -347,48 +341,31 @@
   }
 
   // ============================================================
-  // ------------------------- Demo data ---------------------------
-  // ============================================================
-  function buildDemoJobs(){
-    const today = new Date();
-    function daysFromNow(n){ const d = new Date(today); d.setDate(d.getDate()+n); d.setHours(8,0,0,0); return d; }
-    const defs = [
-      ["500","PM","D-3106A","PM 3Y HPWJ & Inspec CATL.Drum",-10,2,62],
-      ["500","Cleaning","D-3106B","PM 3Y HPWJ Cleaning / Change demister",-8,4,40],
-      ["100","Cleaning","D-3103","Water jet cleaning pot + line vent to ATM",-6,3,20],
-      ["200","Change line","R-3201","PM 1Y Change line slurry TK-Feed",-4,5,8],
-      ["300","Weld","D-3304","PM 3Y HPWJ Cleaning / Change demister",-2,6,2],
-      ["300","Cutting","E-3303","PM 1Y Drop & HPWJ Exchanger scrubber",0,8,0],
-      ["400","Confine","T-3301","PM 3Y Cleaning & Inspec tray 23 Set",2,5,0],
-      ["500","PM","T-3503A","PM 6Y Change molecular sieve",-14,1,95],
-      ["700","Cleaning","F-216","Cleaning F216",-12,2,78],
-      ["200","Cleaning","E-236B","Clean and Inspection",-9,3,55],
-    ];
-    return defs.map(([section, workType, tag, desc, startOffset, durDays, pct]) => ({
-      section, workType, tag, desc,
-      start: daysFromNow(startOffset),
-      finish: (() => { const f = daysFromNow(startOffset + durDays); f.setHours(20,0,0,0); return f; })(),
-      ownPercent: pct, percent: pct, steps: []
-    }));
-  }
-
-  // ============================================================
   // ---------------------------- State -----------------------------
   // ============================================================
   let jobs = [];
   let chartInstance = null;
+  let lastFetchedAt = null;
+  let pollTimer = null;
 
   const sectionFilterEl = document.getElementById("sectionFilter");
   const typeFilterEl = document.getElementById("typeFilter");
   const statusFilterEl = document.getElementById("statusFilter");
+  const statusDot = document.getElementById("statusDot");
+  const lastUpdatedEl = document.getElementById("lastUpdated");
+  const errorBanner = document.getElementById("errorBanner");
 
   function populateFilters(){
     const sections = [...new Set(jobs.map(j => j.section).filter(Boolean))].sort();
     const types = [...new Set(jobs.map(j => j.workType).filter(Boolean))].sort();
+    const prevSection = sectionFilterEl.value, prevType = typeFilterEl.value;
     sectionFilterEl.innerHTML = '<option value="ALL">ทั้งหมด</option>' +
       sections.map(s => `<option value="${escapeHtml(s)}">${escapeHtml(s)}</option>`).join("");
     typeFilterEl.innerHTML = '<option value="ALL">ทั้งหมด</option>' +
       types.map(t => `<option value="${escapeHtml(t)}">${escapeHtml(t)}</option>`).join("");
+    // คงค่าตัวกรองเดิมไว้ถ้ายังมีอยู่ในข้อมูลใหม่ (กันไม่ให้ตัวกรอง reset ทุกครั้งที่ auto-refresh)
+    if (sections.includes(prevSection)) sectionFilterEl.value = prevSection;
+    if (types.includes(prevType)) typeFilterEl.value = prevType;
   }
 
   function getScope(){
@@ -426,10 +403,8 @@
 
     const ctx = document.getElementById("sCurveChart").getContext("2d");
     if (chartInstance){ chartInstance.destroy(); chartInstance = null; }
+    if (!dated.length) return;
 
-    if (!dated.length){
-      return;
-    }
     const minStart = new Date(Math.min(...dated.map(j => j.start.getTime())));
     const maxEnd = new Date(Math.max(...dated.map(j => j.finish.getTime())));
     const totalDays = Math.max(1, Math.round((maxEnd - minStart) / 86400000));
@@ -443,14 +418,11 @@
       const planVal = weightedAvg(scope.map(j => [progressFrac(j.start, j.finish, dt) * 100, durationDays(j.start, j.finish)]));
       planValues.push(Math.round(planVal * 10) / 10);
     }
-    // ensure last point reaches maxEnd exactly
     if (labels[labels.length-1] !== fmtDate(maxEnd)){
       labels.push(fmtDate(maxEnd));
       const planVal = weightedAvg(scope.map(j => [progressFrac(j.start, j.finish, maxEnd) * 100, durationDays(j.start, j.finish)]));
       planValues.push(Math.round(planVal * 10) / 10);
     }
-
-    const todayIdx = labels.findIndex(l => l === fmtDate(new Date()));
 
     chartInstance = new Chart(ctx, {
       type: "line",
@@ -474,9 +446,7 @@
           y: { min:0, max:100, ticks:{ color:"#8fb0b6" }, grid:{ color:"#1c3a43" } },
           x: { ticks:{ color:"#8fb0b6", maxTicksLimit:14 }, grid:{ color:"#1c3a43" } },
         },
-        plugins: {
-          legend: { labels:{ color:"#e6f1f3" } },
-        }
+        plugins: { legend: { labels:{ color:"#e6f1f3" } } }
       }
     });
   }
@@ -485,11 +455,7 @@
     const delayed = scope.filter(j => statusOf(j).cls === "behind");
     const tbody = document.querySelector("#delayTable tbody");
     const emptyNote = document.getElementById("delayEmptyNote");
-    if (!delayed.length){
-      tbody.innerHTML = "";
-      emptyNote.style.display = "block";
-      return;
-    }
+    if (!delayed.length){ tbody.innerHTML = ""; emptyNote.style.display = "block"; return; }
     emptyNote.style.display = "none";
     tbody.innerHTML = delayed.map(j => {
       const expected = Math.round(progressFrac(j.start, j.finish, new Date()) * 100);
@@ -506,11 +472,7 @@
   function renderJobTable(display){
     const tbody = document.querySelector("#jobTable tbody");
     const emptyNote = document.getElementById("jobEmptyNote");
-    if (!display.length){
-      tbody.innerHTML = "";
-      emptyNote.style.display = "block";
-      return;
-    }
+    if (!display.length){ tbody.innerHTML = ""; emptyNote.style.display = "block"; return; }
     emptyNote.style.display = "none";
     tbody.innerHTML = display.map(j => {
       const st = statusOf(j);
@@ -531,67 +493,68 @@
     renderJobTable(display);
   }
 
-  function loadJobs(newJobs, sourceLabel){
-    jobs = newJobs;
-    populateFilters();
-    sectionFilterEl.value = "ALL";
-    typeFilterEl.value = "ALL";
-    statusFilterEl.value = "ALL";
-    document.getElementById("lastUpdated").innerText =
-      `โหลดข้อมูลจาก: ${sourceLabel} • ${new Date().toLocaleString("th-TH")}`;
-    render();
+  function updateStatusLine(ok){
+    if (ok){
+      const ageMs = Date.now() - lastFetchedAt;
+      const isStale = ageMs > STALE_AFTER_MS;
+      statusDot.className = "status-dot" + (isStale ? " stale" : "");
+      lastUpdatedEl.innerText = `ข้อมูลล่าสุดดึงเมื่อ ${new Date(lastFetchedAt).toLocaleString("th-TH")}`
+        + (isStale ? " (ไม่มีการอัปเดตมานาน — อาจรอผู้ดูแลอัปโหลดไฟล์ใหม่)" : "");
+    } else {
+      statusDot.className = "status-dot error";
+    }
   }
 
   // ============================================================
-  // ---------------------------- Events ------------------------------
+  // ---------------- ดึง data.csv จาก repo อัตโนมัติ ------------------
   // ============================================================
-  document.getElementById("demoBtn").addEventListener("click", () => {
-    loadJobs(buildDemoJobs(), "ข้อมูลตัวอย่าง (Demo)");
-  });
+  async function fetchAndRender(isFirstLoad){
+    try {
+      const resp = await fetch(DATA_URL + "?t=" + Date.now(), { cache: "no-store" });
+      if (!resp.ok) throw new Error("โหลดไฟล์ไม่สำเร็จ (HTTP " + resp.status + ")");
+      const text = await resp.text();
+      const rows = parseCSV(text);
+      const parsed = buildJobs(rows);
+      if (!parsed.length) throw new Error("ไม่พบข้อมูลงาน (TAG) ในไฟล์ data.csv");
 
-  document.getElementById("csvInput").addEventListener("change", (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (ev) => {
-      try {
-        const rows = parseCSV(ev.target.result);
-        const parsed = buildJobs(rows);
-        if (!parsed.length){
-          alert("ไม่พบข้อมูลงาน (TAG) ในไฟล์นี้ — ตรวจสอบว่า export มาจากชีท Sch.Plan และมีคอลัมน์ TAG อยู่");
-          return;
-        }
-        loadJobs(parsed, file.name);
-      } catch(err){
-        alert("อ่านไฟล์ไม่สำเร็จ: " + err.message);
+      jobs = parsed;
+      lastFetchedAt = Date.now();
+      errorBanner.style.display = "none";
+      populateFilters();
+      render();
+      updateStatusLine(true);
+    } catch (err) {
+      updateStatusLine(false);
+      if (isFirstLoad){
+        errorBanner.style.display = "block";
+        errorBanner.innerText =
+          `ยังไม่พบไฟล์ data.csv ในที่เก็บนี้ (${err.message}) — กรุณาให้ผู้ดูแลอัปโหลดไฟล์ data.csv ไว้ในโฟลเดอร์เดียวกับ index.html`;
+      } else {
+        // ครั้งถัดไปถ้าโหลดพลาด ไม่รบกวนผู้ใช้ด้วย banner ซ้ำ แค่เปลี่ยนจุดสถานะเป็นสีแดงชั่วคราว
+        console.warn("Auto-refresh โหลดข้อมูลไม่สำเร็จ:", err.message);
       }
-    };
-    reader.readAsText(file, "UTF-8");
-  });
+    }
+  }
+
+  function startPolling(){
+    if (pollTimer) clearInterval(pollTimer);
+    pollTimer = setInterval(() => fetchAndRender(false), POLL_INTERVAL_MS);
+  }
 
   [sectionFilterEl, typeFilterEl, statusFilterEl].forEach(el => el.addEventListener("change", render));
-  document.getElementById("refreshBtn").addEventListener("click", render);
+  document.getElementById("refreshBtn").addEventListener("click", () => fetchAndRender(false));
 
-  // ---- responsive resize handling ----
   let resizeTimer;
   window.addEventListener("resize", () => {
     clearTimeout(resizeTimer);
-    resizeTimer = setTimeout(() => {
-      if (chartInstance) chartInstance.resize();
-    }, 150);
+    resizeTimer = setTimeout(() => { if (chartInstance) chartInstance.resize(); }, 150);
   });
 
-  // ---- initial state: load demo data so the dashboard isn't empty ----
-  loadJobs(buildDemoJobs(), "ข้อมูลตัวอย่าง (Demo)");
+  // ---- initial load ----
+  fetchAndRender(true);
+  startPolling();
 
 })();
 </script>
 </body>
 </html>
-
-							<script>
-                            	
-							</script>
-                        </body>
-                        </html>
-                    
