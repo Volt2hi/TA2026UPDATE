@@ -230,7 +230,7 @@
   const lastUpdatedEl = document.getElementById("lastUpdated");
   const errorBanner = document.getElementById("errorBanner");
 
-  function jobKey(j){ return j.tag + "::" + j.desc; }
+  function (j){ return j.tag + "::" + j.desc; }
 
   function populateFilters(){
     const sections = [...new Set(jobs.map(j => j.section).filter(Boolean))].sort();
@@ -382,7 +382,7 @@
     let html = "";
     display.forEach(j => {
       const st = statusOf(j);
-      const key = jobKey(j);
+      const key = jobKey(id);
       const isExpanded = expandedKeys.has(key);
       html += `
         <tr class="job-row${isExpanded ? " expanded" : ""}" data-key="${escapeHtml(key)}">
@@ -406,7 +406,7 @@
       row.addEventListener("click", () => {
         const key = row.getAttribute("data-key");
         const detailRow = tbody.querySelector(`tr.detail-row[data-key-detail="${CSS.escape(key)}"]`);
-        const job = display.find(j => jobKey(j) === key);
+        const job = display.find(j => jobKey(id) === key);
         if (!detailRow || !job) return;
 
         const nowExpanded = !row.classList.contains("expanded");
@@ -458,6 +458,7 @@
       if (!payload.jobs || !payload.jobs.length) throw new Error("ไม่พบข้อมูลงานจาก Apps Script");
 
       jobs = payload.jobs.map(j => ({
+        id: j.id,
         section: j.section || "",
         tag: j.tag || "",
         desc: j.desc || "",
