@@ -50,7 +50,7 @@
   .kpi-card.behind .value{color:var(--red);}
   .chart-wrap{
     background:var(--panel); border:1px solid var(--border); border-radius:10px;
-    padding:14px; margin-bottom:20px; position:relative; height:340px;
+    padding:14px; margin-bottom:20px; position:relative; height:360px;
   }
   .chart-head{display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;}
   .chart-head span{font-size:12px; color:var(--muted);}
@@ -69,9 +69,7 @@
     color:var(--teal); font-weight:700; transition:transform .15s ease;
   }
   tr.job-row.expanded .expand-icon{ transform:rotate(90deg); }
-  tr.detail-row td{
-    background:#0d2229; padding:0; border-bottom:1px solid var(--border);
-  }
+  tr.detail-row td{ background:#0d2229; padding:0; border-bottom:1px solid var(--border); }
   tr.detail-row.hidden{ display:none; }
   .detail-inner{ padding:10px 14px 14px 34px; }
   .detail-inner .no-steps{ color:var(--muted); font-size:11.5px; padding:6px 0; }
@@ -108,7 +106,7 @@
   <div class="toolbar">
     <span style="font-size:12px;color:var(--muted);">
       ข้อมูลดึงจาก Google Apps Script (ซิงก์จากไฟล์ Excel ใน Google Drive ทุก 15 นาที) และรีเฟรชหน้านี้ทุก 30 วินาที —
-      คลิกที่ชื่องานในตารางด้านล่างเพื่อดูรายละเอียดขั้นตอนย่อย
+      คลิกที่แถวงานเพื่อดูรายละเอียดขั้นตอนย่อย (Plan% / Actual% ของแต่ละขั้นตอน)
     </span>
     <button class="secondary" id="refreshBtn">รีเฟรชตอนนี้</button>
   </div>
@@ -134,7 +132,7 @@
   <div class="kpi-row" id="kpiRow"></div>
   <div class="chart-wrap">
     <div class="chart-head">
-      <strong style="font-size:13px;">S-Curve: แผนงาน</strong>
+      <strong style="font-size:13px;">S-Curve: แผน (Plan) เทียบ จริง (Actual)</strong>
       <span id="chartScopeLabel">ภาพรวมทั้งหมด</span>
     </div>
     <canvas id="sCurveChart"></canvas>
@@ -168,13 +166,9 @@
 (function(){
   "use strict";
 
-  // ============================================================
-  // ---------------- แก้บรรทัดนี้ให้เป็น URL จริงจากตอน Deploy ----------------
-  // ============================================================
   const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbx-TsKC8ZWPh1aF5Kke9-O3qXeLsFs9VcuF9pFxKWuFgqAEegFfzuo-qLoCqPjKGJ1Dlw/exec"; // << แก้ตรงนี้
   const POLL_INTERVAL_MS = 30000;
   const STALE_AFTER_MS = 1000 * 60 * 60 * 6;
-
   const UNSPECIFIED_TYPE = "ไม่ระบุประเภท";
 
   // ============================================================
@@ -213,6 +207,19 @@
   function escapeHtml(s){
     return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   }
+  /** หาค่า % จากประวัติ ณ วันที่กำหนด แบบ "ถือค่าล่าสุดไว้" (step function)
+   *  ก่อนมีประวัติเลย = 0, หลังจุดสุดท้าย = ค้างค่าล่าสุดไว้ (ไม่เดาอนาคต) */
+  function interpolateJobHistory(histSorted, targetDate){
+    if (!histSorted.length) return 0;
+    const t = targetDate.getTime();
+    const firstTime = new Date(histSorted[0].date).getTime();
+    if (t < firstTime) return 0;
+    for (let i = histSorted.length - 1; i >= 0; i--){
+      const dTime = new Date(histSorted[i].date).getTime();
+      if (dTime <= t) return histSorted[i].percent;
+    }
+    return 0;
+  }
 
   // ============================================================
   // ---------------------------- State -----------------------------
@@ -221,7 +228,7 @@
   let chartInstance = null;
   let lastFetchedAt = null;
   let pollTimer = null;
-  let expandedKeys = new Set(); // เก็บว่าแถวไหนถูกขยายไว้อยู่ (คงสถานะไว้ข้ามการ auto-refresh)
+  let expandedKeys = new Set();
 
   const sectionFilterEl = document.getElementById("sectionFilter");
   const typeFilterEl = document.getElementById("typeFilter");
@@ -230,7 +237,7 @@
   const lastUpdatedEl = document.getElementById("lastUpdated");
   const errorBanner = document.getElementById("errorBanner");
 
-  function (j){ return j.tag + "::" + j.desc; }
+  function jobKey(j){ return String(j.id); }
 
   function populateFilters(){
     const sections = [...new Set(jobs.map(j => j.section).filter(Boolean))].sort();
@@ -281,48 +288,76 @@
     if (chartInstance){ chartInstance.destroy(); chartInstance = null; }
     if (!dated.length) return;
 
+    const today = new Date();
     const minStart = new Date(Math.min(...dated.map(j => j.start.getTime())));
     const maxEnd = new Date(Math.max(...dated.map(j => j.finish.getTime())));
     const totalDays = Math.max(1, Math.round((maxEnd - minStart) / 86400000));
     const stepDays = totalDays > 60 ? Math.ceil(totalDays / 60) : 1;
 
-    const labels = [];
-    const planValues = [];
+    // รวมวันที่จากตารางแผน + วันที่ที่มีประวัติจริง + วันนี้ เข้าด้วยกัน ให้แกน x ตรงกันทั้งสองเส้น
+    const planDates = [];
     for (let t = minStart.getTime(); t <= maxEnd.getTime(); t += stepDays * 86400000){
-      const dt = new Date(t);
-      labels.push(fmtDate(dt));
-      const planVal = weightedAvg(scope.map(j => [progressFrac(j.start, j.finish, dt) * 100, durationDays(j.start, j.finish)]));
-      planValues.push(Math.round(planVal * 10) / 10);
+      planDates.push(new Date(t));
     }
-    if (labels[labels.length-1] !== fmtDate(maxEnd)){
-      labels.push(fmtDate(maxEnd));
-      const planVal = weightedAvg(scope.map(j => [progressFrac(j.start, j.finish, maxEnd) * 100, durationDays(j.start, j.finish)]));
-      planValues.push(Math.round(planVal * 10) / 10);
-    }
+    if (fmtDate(planDates[planDates.length-1]) !== fmtDate(maxEnd)) planDates.push(new Date(maxEnd));
+
+    const histDates = [];
+    scope.forEach(j => (j.history || []).forEach(h => histDates.push(new Date(h.date))));
+    histDates.push(today);
+
+    const allDatesSet = new Map();
+    [...planDates, ...histDates].forEach(d => allDatesSet.set(fmtDate(d), d));
+    const allDates = [...allDatesSet.values()].sort((a,b) => a - b);
+
+    const labels = allDates.map(d => fmtDate(d));
+    const planValues = allDates.map(dt =>
+      Math.round(weightedAvg(scope.map(j => [progressFrac(j.start, j.finish, dt) * 100, durationDays(j.start, j.finish)])) * 10) / 10
+    );
+    const actualValues = allDates.map(dt => {
+      if (dt > today) return null; // ไม่เดาอนาคต
+      const vals = scope.map(j => [interpolateJobHistory(j.history || [], dt), durationDays(j.start, j.finish)]);
+      return Math.round(weightedAvg(vals) * 10) / 10;
+    });
 
     chartInstance = new Chart(ctx, {
       type: "line",
       data: {
         labels,
-        datasets: [{
-          label: "แผน (Plan)",
-          data: planValues,
-          borderColor: "#2dd4bf",
-          borderDash: [6,4],
-          backgroundColor: "rgba(45,212,191,0.08)",
-          fill: true,
-          tension: 0.15,
-          pointRadius: 0,
-        }]
+        datasets: [
+          {
+            label: "แผน (Plan)",
+            data: planValues,
+            borderColor: "#2dd4bf",
+            borderDash: [6,4],
+            backgroundColor: "rgba(45,212,191,0.06)",
+            fill: true,
+            tension: 0.15,
+            pointRadius: 0,
+          },
+          {
+            label: "จริง (Actual)",
+            data: actualValues,
+            borderColor: "#f59e0b",
+            backgroundColor: "rgba(245,158,11,0.12)",
+            fill: true,
+            tension: 0.1,
+            pointRadius: 2,
+            spanGaps: true,
+          }
+        ]
       },
       options: {
         responsive: true,
         maintainAspectRatio: false,
+        interaction: { mode: "index", intersect: false },
         scales: {
-          y: { min:0, max:100, ticks:{ color:"#8fb0b6" }, grid:{ color:"#1c3a43" } },
+          y: { min:0, max:100, ticks:{ color:"#8fb0b6", callback:v=>v+"%" }, grid:{ color:"#1c3a43" } },
           x: { ticks:{ color:"#8fb0b6", maxTicksLimit:14 }, grid:{ color:"#1c3a43" } },
         },
-        plugins: { legend: { labels:{ color:"#e6f1f3" } } }
+        plugins: {
+          legend: { labels:{ color:"#e6f1f3" } },
+          tooltip: { callbacks: { label: c => c.dataset.label + ": " + (c.parsed.y == null ? "-" : c.parsed.y + "%") } }
+        }
       }
     });
   }
@@ -345,14 +380,32 @@
     }).join("");
   }
 
-  // ---- สร้างแถวรายละเอียดขั้นตอนย่อย (ขึ้นเมื่อคลิกแถวงาน) ----
   function buildStepDetailHtml(job){
     const steps = job.steps || [];
     if (!steps.length){
       return `<div class="detail-inner"><div class="no-steps">งานนี้ไม่มีขั้นตอนย่อยแยกไว้ — % ที่แสดงคือ % ของงานโดยตรง (${Math.round(job.percent)}%)</div></div>`;
     }
-    const rows = steps.map((s, idx) => `
-      <tr>
+    const hasWeights = steps.some(s => s.planWeight !== null && s.planWeight !== undefined);
+    const headCols = hasWeights
+      ? `<th>#</th><th>ขั้นตอน / อุปกรณ์</th><th>Plan %</th><th>Actual %</th><th>ผลที่ได้</th>`
+      : `<th>#</th><th>ขั้นตอน / อุปกรณ์</th><th>ความคืบหน้า</th>`;
+    const rows = steps.map((s, idx) => {
+      if (hasWeights){
+        const contribution = (s.planWeight || 0) * (s.percent || 0) / 100;
+        return `<tr>
+          <td style="width:28px;color:var(--muted);">${idx + 1}</td>
+          <td>${escapeHtml(s.desc)}</td>
+          <td style="color:var(--muted);">${(s.planWeight || 0).toFixed(2)}%</td>
+          <td>
+            <div class="step-bar-cell">
+              <div class="step-bar-outer"><div class="step-bar-inner" style="width:${Math.max(0, Math.min(100, s.percent))}%;"></div></div>
+              <span class="step-pct-text">${Math.round(s.percent)}%</span>
+            </div>
+          </td>
+          <td style="color:var(--teal);font-weight:600;">${contribution.toFixed(2)}%</td>
+        </tr>`;
+      }
+      return `<tr>
         <td style="width:28px;color:var(--muted);">${idx + 1}</td>
         <td>${escapeHtml(s.desc)}</td>
         <td>
@@ -361,12 +414,12 @@
             <span class="step-pct-text">${Math.round(s.percent)}%</span>
           </div>
         </td>
-      </tr>
-    `).join("");
+      </tr>`;
+    }).join("");
     return `
       <div class="detail-inner">
         <table class="step-table">
-          <thead><tr><th>#</th><th>ขั้นตอน / อุปกรณ์</th><th>ความคืบหน้า</th></tr></thead>
+          <thead><tr>${headCols}</tr></thead>
           <tbody>${rows}</tbody>
         </table>
       </div>
@@ -382,7 +435,7 @@
     let html = "";
     display.forEach(j => {
       const st = statusOf(j);
-      const key = jobKey(id);
+      const key = jobKey(j);
       const isExpanded = expandedKeys.has(key);
       html += `
         <tr class="job-row${isExpanded ? " expanded" : ""}" data-key="${escapeHtml(key)}">
@@ -401,12 +454,11 @@
     });
     tbody.innerHTML = html;
 
-    // ผูก event คลิกใหม่ทุกครั้งที่ render (เพราะ innerHTML ถูกสร้างใหม่)
     tbody.querySelectorAll("tr.job-row").forEach(row => {
       row.addEventListener("click", () => {
         const key = row.getAttribute("data-key");
         const detailRow = tbody.querySelector(`tr.detail-row[data-key-detail="${CSS.escape(key)}"]`);
-        const job = display.find(j => jobKey(id) === key);
+        const job = display.find(j => jobKey(j) === key);
         if (!detailRow || !job) return;
 
         const nowExpanded = !row.classList.contains("expanded");
@@ -445,9 +497,6 @@
     }
   }
 
-  // ============================================================
-  // --------------- ดึงข้อมูลจาก Apps Script (JSON) อัตโนมัติ ---------------
-  // ============================================================
   async function fetchAndRender(isFirstLoad){
     try {
       const url = APPS_SCRIPT_URL + "?format=json&t=" + Date.now();
@@ -467,6 +516,7 @@
         start: j.start ? new Date(j.start) : null,
         finish: j.finish ? new Date(j.finish) : null,
         steps: Array.isArray(j.steps) ? j.steps : [],
+        history: Array.isArray(j.history) ? j.history : [],
       }));
 
       lastFetchedAt = Date.now();
@@ -504,7 +554,6 @@
     resizeTimer = setTimeout(() => { if (chartInstance) chartInstance.resize(); }, 150);
   });
 
-  // ---- initial load ----
   fetchAndRender(true);
   startPolling();
 
