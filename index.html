@@ -56,12 +56,32 @@
   .chart-head span{font-size:12px; color:var(--muted);}
   .table-wrap{
     background:var(--panel); border:1px solid var(--border); border-radius:10px;
-    overflow:auto; max-height:420px;
+    overflow:auto; max-height:460px;
   }
   table{width:100%; border-collapse:collapse; font-size:12.5px;}
   th,td{padding:8px 10px; text-align:left; border-bottom:1px solid var(--border); white-space:nowrap;}
   th{background:var(--panel2); color:var(--muted); position:sticky; top:0; font-weight:600;}
-  tr:hover td{background:#123038;}
+  tr.job-row{cursor:pointer;}
+  tr.job-row:hover td{background:#123038;}
+  tr.job-row td.job-name-cell{white-space:normal;}
+  .expand-icon{
+    display:inline-block; width:14px; text-align:center; margin-right:6px;
+    color:var(--teal); font-weight:700; transition:transform .15s ease;
+  }
+  tr.job-row.expanded .expand-icon{ transform:rotate(90deg); }
+  tr.detail-row td{
+    background:#0d2229; padding:0; border-bottom:1px solid var(--border);
+  }
+  tr.detail-row.hidden{ display:none; }
+  .detail-inner{ padding:10px 14px 14px 34px; }
+  .detail-inner .no-steps{ color:var(--muted); font-size:11.5px; padding:6px 0; }
+  table.step-table{ width:100%; border-collapse:collapse; font-size:11.8px; margin-top:4px; }
+  table.step-table th{ background:transparent; color:var(--muted); position:static; font-weight:600; padding:4px 8px; border-bottom:1px solid var(--border); }
+  table.step-table td{ padding:5px 8px; border-bottom:1px solid #16343c; white-space:normal; }
+  .step-bar-cell{ display:flex; align-items:center; gap:8px; min-width:150px; }
+  .step-bar-outer{ flex:1; height:6px; background:#0a1b21; border-radius:999px; overflow:hidden; min-width:70px; }
+  .step-bar-inner{ height:100%; background:linear-gradient(90deg,var(--teal-dark),var(--teal)); }
+  .step-pct-text{ font-size:11px; color:var(--text); min-width:34px; text-align:right; }
   .status-ahead{color:var(--green); font-weight:600;}
   .status-ontrack{color:var(--teal); font-weight:600;}
   .status-behind{color:var(--red); font-weight:700;}
@@ -88,7 +108,7 @@
   <div class="toolbar">
     <span style="font-size:12px;color:var(--muted);">
       ข้อมูลดึงจาก Google Apps Script (ซิงก์จากไฟล์ Excel ใน Google Drive ทุก 15 นาที) และรีเฟรชหน้านี้ทุก 30 วินาที —
-      ไม่ต้องทำอะไร เพียงรอให้ผู้ดูแลอัปเดตไฟล์ต้นทาง
+      คลิกที่ชื่องานในตารางด้านล่างเพื่อดูรายละเอียดขั้นตอนย่อย
     </span>
     <button class="secondary" id="refreshBtn">รีเฟรชตอนนี้</button>
   </div>
@@ -130,7 +150,7 @@
     </table>
     <div class="empty-note" id="delayEmptyNote" style="display:none;">ไม่มีงานล่าช้าในขอบเขตนี้</div>
   </div>
-  <h3>รายการงานทั้งหมด</h3>
+  <h3>รายการงานทั้งหมด <span style="font-weight:400;color:var(--muted);font-size:11.5px;">(คลิกที่แถวเพื่อดูรายละเอียดขั้นตอนย่อย)</span></h3>
   <div class="table-wrap">
     <table id="jobTable">
       <thead><tr>
@@ -152,8 +172,8 @@
   // ---------------- แก้บรรทัดนี้ให้เป็น URL จริงจากตอน Deploy ----------------
   // ============================================================
   const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbx-TsKC8ZWPh1aF5Kke9-O3qXeLsFs9VcuF9pFxKWuFgqAEegFfzuo-qLoCqPjKGJ1Dlw/exec"; // << แก้ตรงนี้
-  const POLL_INTERVAL_MS = 30000;                 // รีเฟรชข้อมูลอัตโนมัติทุก 30 วินาที
-  const STALE_AFTER_MS = 1000 * 60 * 60 * 6;      // ถ้าไฟล์ไม่เปลี่ยนเกิน 6 ชม. ให้ขึ้นจุดเตือนสีเหลือง
+  const POLL_INTERVAL_MS = 30000;
+  const STALE_AFTER_MS = 1000 * 60 * 60 * 6;
 
   const UNSPECIFIED_TYPE = "ไม่ระบุประเภท";
 
@@ -201,6 +221,7 @@
   let chartInstance = null;
   let lastFetchedAt = null;
   let pollTimer = null;
+  let expandedKeys = new Set(); // เก็บว่าแถวไหนถูกขยายไว้อยู่ (คงสถานะไว้ข้ามการ auto-refresh)
 
   const sectionFilterEl = document.getElementById("sectionFilter");
   const typeFilterEl = document.getElementById("typeFilter");
@@ -208,6 +229,8 @@
   const statusDot = document.getElementById("statusDot");
   const lastUpdatedEl = document.getElementById("lastUpdated");
   const errorBanner = document.getElementById("errorBanner");
+
+  function jobKey(j){ return j.tag + "::" + j.desc; }
 
   function populateFilters(){
     const sections = [...new Set(jobs.map(j => j.section).filter(Boolean))].sort();
@@ -322,20 +345,84 @@
     }).join("");
   }
 
+  // ---- สร้างแถวรายละเอียดขั้นตอนย่อย (ขึ้นเมื่อคลิกแถวงาน) ----
+  function buildStepDetailHtml(job){
+    const steps = job.steps || [];
+    if (!steps.length){
+      return `<div class="detail-inner"><div class="no-steps">งานนี้ไม่มีขั้นตอนย่อยแยกไว้ — % ที่แสดงคือ % ของงานโดยตรง (${Math.round(job.percent)}%)</div></div>`;
+    }
+    const rows = steps.map((s, idx) => `
+      <tr>
+        <td style="width:28px;color:var(--muted);">${idx + 1}</td>
+        <td>${escapeHtml(s.desc)}</td>
+        <td>
+          <div class="step-bar-cell">
+            <div class="step-bar-outer"><div class="step-bar-inner" style="width:${Math.max(0, Math.min(100, s.percent))}%;"></div></div>
+            <span class="step-pct-text">${Math.round(s.percent)}%</span>
+          </div>
+        </td>
+      </tr>
+    `).join("");
+    return `
+      <div class="detail-inner">
+        <table class="step-table">
+          <thead><tr><th>#</th><th>ขั้นตอน / อุปกรณ์</th><th>ความคืบหน้า</th></tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>
+    `;
+  }
+
   function renderJobTable(display){
     const tbody = document.querySelector("#jobTable tbody");
     const emptyNote = document.getElementById("jobEmptyNote");
     if (!display.length){ tbody.innerHTML = ""; emptyNote.style.display = "block"; return; }
     emptyNote.style.display = "none";
-    tbody.innerHTML = display.map(j => {
+
+    let html = "";
+    display.forEach(j => {
       const st = statusOf(j);
-      return `<tr>
-        <td>${escapeHtml(j.tag)}</td><td>${escapeHtml(j.workType)}</td>
-        <td>${escapeHtml(j.desc.slice(0,70))}</td><td>${Math.round(j.percent)}%</td>
-        <td>${fmtDate(j.start)}</td><td>${fmtDate(j.finish)}</td>
-        <td class="status-${st.cls}">${st.label}</td>
-      </tr>`;
-    }).join("");
+      const key = jobKey(j);
+      const isExpanded = expandedKeys.has(key);
+      html += `
+        <tr class="job-row${isExpanded ? " expanded" : ""}" data-key="${escapeHtml(key)}">
+          <td>${escapeHtml(j.tag)}</td>
+          <td>${escapeHtml(j.workType)}</td>
+          <td class="job-name-cell"><span class="expand-icon">▶</span>${escapeHtml(j.desc.slice(0,80))}</td>
+          <td>${Math.round(j.percent)}%</td>
+          <td>${fmtDate(j.start)}</td>
+          <td>${fmtDate(j.finish)}</td>
+          <td class="status-${st.cls}">${st.label}</td>
+        </tr>
+        <tr class="detail-row${isExpanded ? "" : " hidden"}" data-key-detail="${escapeHtml(key)}">
+          <td colspan="7">${isExpanded ? buildStepDetailHtml(j) : ""}</td>
+        </tr>
+      `;
+    });
+    tbody.innerHTML = html;
+
+    // ผูก event คลิกใหม่ทุกครั้งที่ render (เพราะ innerHTML ถูกสร้างใหม่)
+    tbody.querySelectorAll("tr.job-row").forEach(row => {
+      row.addEventListener("click", () => {
+        const key = row.getAttribute("data-key");
+        const detailRow = tbody.querySelector(`tr.detail-row[data-key-detail="${CSS.escape(key)}"]`);
+        const job = display.find(j => jobKey(j) === key);
+        if (!detailRow || !job) return;
+
+        const nowExpanded = !row.classList.contains("expanded");
+        if (nowExpanded){
+          expandedKeys.add(key);
+          row.classList.add("expanded");
+          detailRow.classList.remove("hidden");
+          detailRow.querySelector("td").innerHTML = buildStepDetailHtml(job);
+        } else {
+          expandedKeys.delete(key);
+          row.classList.remove("expanded");
+          detailRow.classList.add("hidden");
+          detailRow.querySelector("td").innerHTML = "";
+        }
+      });
+    });
   }
 
   function render(){
@@ -378,6 +465,7 @@
         percent: j.percent || 0,
         start: j.start ? new Date(j.start) : null,
         finish: j.finish ? new Date(j.finish) : null,
+        steps: Array.isArray(j.steps) ? j.steps : [],
       }));
 
       lastFetchedAt = Date.now();
