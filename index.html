@@ -112,10 +112,10 @@
   </div>
   <div class="filters">
     <div class="filter-group">
-       <label>Plant / โรงงาน</label>
-    <select id="plantFilter"><option value="ALL">ทั้งหมด</option></select>
-  </div>
-  <div class="filter-group">
+      <label>Plant / โรงงาน</label>
+      <select id="plantFilter"><option value="ALL">ทั้งหมด</option></select>
+    </div>
+    <div class="filter-group">
       <label>Section / พื้นที่</label>
       <select id="sectionFilter"><option value="ALL">ทั้งหมด</option></select>
     </div>
@@ -169,10 +169,9 @@
 <script>
 (function(){
   "use strict";
-
-  const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbx-TsKC8ZWPh1aF5Kke9-O3qXeLsFs9VcuF9pFxKWuFgqAEegFfzuo-qLoCqPjKGJ1Dlw/exec"; // << แก้ตรงนี้
+  const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbx-TsKC8ZWPh1aF5Kke9-O3qXeLsFs9VcuF9pFxKWuFgqAEegFfzuo-qLoCqPjKGJ1Dlw/exec";
   const POLL_INTERVAL_MS = 30000;
-  const STALE_AFTER_MS = 1000 * 60 * 60 * 6;
+  const STALE_AFTER_MS = 1000 * 60 * 60 * 6; // แก้: เดิมเขียน "1000 _60_ 60 * 6" ไม่ใช่ไวยากรณ์ JS ที่ถูกต้อง (ค่าตั้งใจ = 6 ชั่วโมง)
   const UNSPECIFIED_TYPE = "ไม่ระบุประเภท";
 
   // ============================================================
@@ -195,35 +194,37 @@
     if (asOf >= finish) return 1;
     return (asOf - start) / (finish - start);
   }
-function statusOf(job){
-  if (!job.start || !job.finish) return { label: "ไม่มีแผน", cls: "neutral" };
-  const expected = expectedPercentAt(job, new Date());   // << เปลี่ยนจาก progressFrac(...)*100 เดิม
-  const diff = job.percent - expected;
-  if (diff >= 5) return { label: "เร็วกว่าแผน", cls: "ahead" };
-  if (diff <= -5) return { label: "ล่าช้า", cls: "behind" };
-  return { label: "ตามแผน", cls: "ontrack" };
-}
-  /** คำนวณ % ที่ "ควรจะเป็น" ของงาน ณ วันที่กำหนด โดยใช้ plan weight + start/finish ของแต่ละขั้นตอนย่อย
- *  แม่นยำกว่าการลากเส้นตรงจาก job.start ถึง job.finish มาก เพราะสะท้อนว่าแต่ละช่วงงานหนักเบาต่างกัน
- *  ถ้างานไม่มีขั้นตอนย่อย หรือขั้นตอนไม่มีวันที่ของตัวเอง จะ fallback ไปใช้เส้นตรงแบบเดิม */
-function expectedPercentAt(job, asOfDate) {
-  const stepsWithDates = (job.steps || []).filter(s => s.start && s.finish && s.planWeight !== null);
-  if (!stepsWithDates.length) {
-    // fallback: ไม่มีข้อมูลวันที่ระดับขั้นตอน ใช้เส้นตรงทั้งงานแบบเดิม
-    return progressFrac(job.start, job.finish, asOfDate) * 100;
+
+  // แก้: comment เดิมปิดด้วย "_ /" ซึ่งไม่ใช่ "*/" ทำให้ comment ไม่เคยปิดจริง
+  // และกลืนโค้ดทั้งหมดที่ตามมาจนจบไฟล์ (รวมถึงฟังก์ชัน expectedPercentAt เอง) — เปลี่ยนเป็น // แทน
+  // คำนวณ % ที่ "ควรจะเป็น" ของงาน ณ วันที่กำหนด โดยใช้ plan weight + start/finish ของแต่ละขั้นตอนย่อย
+  // แม่นยำกว่าการลากเส้นตรงจาก job.start ถึง job.finish มาก เพราะสะท้อนว่าแต่ละช่วงงานหนักเบาต่างกัน
+  // ถ้างานไม่มีขั้นตอนย่อย หรือขั้นตอนไม่มีวันที่ของตัวเอง จะ fallback ไปใช้เส้นตรงแบบเดิม
+  function expectedPercentAt(job, asOfDate) {
+    const stepsWithDates = (job.steps || []).filter(s => s.start && s.finish && s.planWeight !== null);
+    if (!stepsWithDates.length) {
+      return progressFrac(job.start, job.finish, asOfDate) * 100;
+    }
+    const totalWeight = stepsWithDates.reduce((sum, s) => sum + s.planWeight, 0);
+    if (totalWeight <= 0) return progressFrac(job.start, job.finish, asOfDate) * 100;
+    const weightedSum = stepsWithDates.reduce((sum, s) => {
+      const stepStart = new Date(s.start);
+      const stepFinish = new Date(s.finish);
+      const frac = progressFrac(stepStart, stepFinish, asOfDate);
+      return sum + s.planWeight * frac;
+    }, 0);
+    return (weightedSum / totalWeight) * 100;
   }
-  const totalWeight = stepsWithDates.reduce((sum, s) => sum + s.planWeight, 0);
-  if (totalWeight <= 0) return progressFrac(job.start, job.finish, asOfDate) * 100;
 
-  const weightedSum = stepsWithDates.reduce((sum, s) => {
-    const stepStart = new Date(s.start);
-    const stepFinish = new Date(s.finish);
-    const frac = progressFrac(stepStart, stepFinish, asOfDate); // 0-1
-    return sum + s.planWeight * frac;
-  }, 0);
+  function statusOf(job){
+    if (!job.start || !job.finish) return { label: "ไม่มีแผน", cls: "neutral" };
+    const expected = expectedPercentAt(job, new Date());
+    const diff = job.percent - expected;
+    if (diff >= 5) return { label: "เร็วกว่าแผน", cls: "ahead" };
+    if (diff <= -5) return { label: "ล่าช้า", cls: "behind" };
+    return { label: "ตามแผน", cls: "ontrack" };
+  }
 
-  return (weightedSum / totalWeight) * 100;
-}
   function fmtDate(d){
     if (!d) return "-";
     const yyyy = d.getFullYear(), mm = String(d.getMonth()+1).padStart(2,"0"), dd = String(d.getDate()).padStart(2,"0");
@@ -232,8 +233,10 @@ function expectedPercentAt(job, asOfDate) {
   function escapeHtml(s){
     return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   }
-  /** หาค่า % จากประวัติ ณ วันที่กำหนด แบบ "ถือค่าล่าสุดไว้" (step function)
-   *  ก่อนมีประวัติเลย = 0, หลังจุดสุดท้าย = ค้างค่าล่าสุดไว้ (ไม่เดาอนาคต) */
+
+  // แก้: comment เดิมก็ปิดผิดแบบเดียวกัน (ปิดด้วย "_ /" แทน "*/") — เปลี่ยนเป็น // แทน
+  // หาค่า % จากประวัติ ณ วันที่กำหนด แบบ "ถือค่าล่าสุดไว้" (step function)
+  // ก่อนมีประวัติเลย = 0, หลังจุดสุดท้าย = ค้างค่าล่าสุดไว้ (ไม่เดาอนาคต)
   function interpolateJobHistory(histSorted, targetDate){
     if (!histSorted.length) return 0;
     const t = targetDate.getTime();
@@ -254,7 +257,6 @@ function expectedPercentAt(job, asOfDate) {
   let lastFetchedAt = null;
   let pollTimer = null;
   let expandedKeys = new Set();
-
   const plantFilterEl = document.getElementById("plantFilter");
   const sectionFilterEl = document.getElementById("sectionFilter");
   const typeFilterEl = document.getElementById("typeFilter");
@@ -262,36 +264,36 @@ function expectedPercentAt(job, asOfDate) {
   const statusDot = document.getElementById("statusDot");
   const lastUpdatedEl = document.getElementById("lastUpdated");
   const errorBanner = document.getElementById("errorBanner");
-
   function jobKey(j){ return String(j.id); }
 
   function populateFilters(){
-  const plants = [...new Set(jobs.map(j => j.plant).filter(Boolean))].sort();
-  const prevPlant = plantFilterEl.value;
-  plantFilterEl.innerHTML = '<option value="ALL">ทั้งหมด</option>' +
-    plants.map(p => `<option value="${escapeHtml(p)}">${escapeHtml(p)}</option>`).join("");
-  if (plants.includes(prevPlant)) plantFilterEl.value = prevPlant;
+    const plants = [...new Set(jobs.map(j => j.plant).filter(Boolean))].sort();
+    const prevPlant = plantFilterEl.value;
+    plantFilterEl.innerHTML = '<option value="ALL">ทั้งหมด</option>' +
+      plants.map(p => `<option value="${escapeHtml(p)}">${escapeHtml(p)}</option>`).join("");
+    if (plants.includes(prevPlant)) plantFilterEl.value = prevPlant;
 
-  const plantScoped = plantFilterEl.value === "ALL" ? jobs : jobs.filter(j => j.plant === plantFilterEl.value);
-  const sections = [...new Set(plantScoped.map(j => j.section).filter(Boolean))].sort();
-  const types = [...new Set(plantScoped.map(j => j.workType).filter(Boolean))].sort();
-  const prevSection = sectionFilterEl.value, prevType = typeFilterEl.value;
-  sectionFilterEl.innerHTML = '<option value="ALL">ทั้งหมด</option>' +
-    sections.map(s => `<option value="${escapeHtml(s)}">${escapeHtml(s)}</option>`).join("");
-  typeFilterEl.innerHTML = '<option value="ALL">ทั้งหมด</option>' +
-    types.map(t => `<option value="${escapeHtml(t)}">${escapeHtml(t)}</option>`).join("");
-  if (sections.includes(prevSection)) sectionFilterEl.value = prevSection;
-  if (types.includes(prevType)) typeFilterEl.value = prevType;
-}
-function getScope(){
-  const plantF = plantFilterEl.value, sectionF = sectionFilterEl.value, typeF = typeFilterEl.value, statusF = statusFilterEl.value;
-  let scope = jobs;
-  if (plantF !== "ALL") scope = scope.filter(j => j.plant === plantF);
-  if (sectionF !== "ALL") scope = scope.filter(j => j.section === sectionF);
-  if (typeF !== "ALL") scope = scope.filter(j => j.workType === typeF);
-  const display = statusF === "ALL" ? scope : scope.filter(j => statusOf(j).cls === statusF);
-  return { scope, display, plantF, sectionF, typeF, statusF };
-}
+    const plantScoped = plantFilterEl.value === "ALL" ? jobs : jobs.filter(j => j.plant === plantFilterEl.value);
+    const sections = [...new Set(plantScoped.map(j => j.section).filter(Boolean))].sort();
+    const types = [...new Set(plantScoped.map(j => j.workType).filter(Boolean))].sort();
+    const prevSection = sectionFilterEl.value, prevType = typeFilterEl.value;
+    sectionFilterEl.innerHTML = '<option value="ALL">ทั้งหมด</option>' +
+      sections.map(s => `<option value="${escapeHtml(s)}">${escapeHtml(s)}</option>`).join("");
+    typeFilterEl.innerHTML = '<option value="ALL">ทั้งหมด</option>' +
+      types.map(t => `<option value="${escapeHtml(t)}">${escapeHtml(t)}</option>`).join("");
+    if (sections.includes(prevSection)) sectionFilterEl.value = prevSection;
+    if (types.includes(prevType)) typeFilterEl.value = prevType;
+  }
+
+  function getScope(){
+    const plantF = plantFilterEl.value, sectionF = sectionFilterEl.value, typeF = typeFilterEl.value, statusF = statusFilterEl.value;
+    let scope = jobs;
+    if (plantF !== "ALL") scope = scope.filter(j => j.plant === plantF);
+    if (sectionF !== "ALL") scope = scope.filter(j => j.section === sectionF);
+    if (typeF !== "ALL") scope = scope.filter(j => j.workType === typeF);
+    const display = statusF === "ALL" ? scope : scope.filter(j => statusOf(j).cls === statusF);
+    return { scope, display, plantF, sectionF, typeF, statusF };
+  }
 
   function renderKpis(scope, display){
     const overallPct = jobs.length ? weightedAvg(jobs.map(j => [j.percent, durationDays(j.start, j.finish)])) : 0;
@@ -299,7 +301,6 @@ function getScope(){
     const ahead = scope.filter(j => statusOf(j).cls === "ahead").length;
     const ontrack = scope.filter(j => statusOf(j).cls === "ontrack").length;
     const behind = scope.filter(j => statusOf(j).cls === "behind").length;
-
     document.getElementById("kpiRow").innerHTML = `
       <div class="kpi-card"><div class="value">${Math.round(overallPct)}%</div><div class="label">รวมทั้งหมด (${jobs.length} งาน)</div></div>
       <div class="kpi-card"><div class="value">${Math.round(scopePct)}%</div><div class="label">ในขอบเขตที่เลือก (${display.length} งาน)</div></div>
@@ -310,12 +311,15 @@ function getScope(){
     document.getElementById("jobCountBadge").innerText = `${jobs.length} งาน`;
   }
 
-function renderChart(scope, plantF, sectionF, typeF){
-  const dated = scope.filter(j => j.start && j.finish);
-  const labelParts = [];
-  if (plantF !== "ALL") labelParts.push("Plant: " + plantF);
-  if (sectionF !== "ALL") labelParts.push("Section: " + sectionF);
-  if (typeF !== "ALL") labelParts.push("ประเภท: " + typeF);
+  // แก้: เดิมมีลูปสร้าง labels/planValues ซ้ำ 2 รอบ (รอบจาก allDates ที่ถูกต้อง
+  // แล้วมีอีกลูปทับเข้าไปอีกชุดจาก minStart..maxEnd) ทำให้ labels ยาวเกิน planValues/actualValues
+  // รวมเหลือจุดคำนวณเดียวโดยใช้ allDates ชุดเดียวกันทั้งหมด — สูตร expectedPercentAt ไม่เปลี่ยน
+  function renderChart(scope, plantF, sectionF, typeF){
+    const dated = scope.filter(j => j.start && j.finish);
+    const labelParts = [];
+    if (plantF !== "ALL") labelParts.push("Plant: " + plantF);
+    if (sectionF !== "ALL") labelParts.push("Section: " + sectionF);
+    if (typeF !== "ALL") labelParts.push("ประเภท: " + typeF);
     document.getElementById("chartScopeLabel").innerText = labelParts.length ? labelParts.join(" • ") : "ภาพรวมทั้งหมด";
 
     const ctx = document.getElementById("sCurveChart").getContext("2d");
@@ -328,7 +332,6 @@ function renderChart(scope, plantF, sectionF, typeF){
     const totalDays = Math.max(1, Math.round((maxEnd - minStart) / 86400000));
     const stepDays = totalDays > 60 ? Math.ceil(totalDays / 60) : 1;
 
-    // รวมวันที่จากตารางแผน + วันที่ที่มีประวัติจริง + วันนี้ เข้าด้วยกัน ให้แกน x ตรงกันทั้งสองเส้น
     const planDates = [];
     for (let t = minStart.getTime(); t <= maxEnd.getTime(); t += stepDays * 86400000){
       planDates.push(new Date(t));
@@ -344,15 +347,11 @@ function renderChart(scope, plantF, sectionF, typeF){
     const allDates = [...allDatesSet.values()].sort((a,b) => a - b);
 
     const labels = allDates.map(d => fmtDate(d));
-  const planValues = [];
-for (let t = minStart.getTime(); t <= maxEnd.getTime(); t += stepDays * 86400000){
-  const dt = new Date(t);
-  labels.push(fmtDate(dt));
-  const planVal = weightedAvg(scope.map(j => [expectedPercentAt(j, dt), durationDays(j.start, j.finish)]));  // << เปลี่ยนตรงนี้
-  planValues.push(Math.round(planVal * 10) / 10);
-}
+    const planValues = allDates.map(dt =>
+      Math.round(weightedAvg(scope.map(j => [expectedPercentAt(j, dt), durationDays(j.start, j.finish)])) * 10) / 10
+    );
     const actualValues = allDates.map(dt => {
-      if (dt > today) return null; // ไม่เดาอนาคต
+      if (dt > today) return null;
       const vals = scope.map(j => [interpolateJobHistory(j.history || [], dt), durationDays(j.start, j.finish)]);
       return Math.round(weightedAvg(vals) * 10) / 10;
     });
@@ -407,7 +406,7 @@ for (let t = minStart.getTime(); t <= maxEnd.getTime(); t += stepDays * 86400000
     if (!delayed.length){ tbody.innerHTML = ""; emptyNote.style.display = "block"; return; }
     emptyNote.style.display = "none";
     tbody.innerHTML = delayed.map(j => {
-      const expected = Math.round(progressFrac(j.start, j.finish, new Date()) * 100);
+      const expected = Math.round(expectedPercentAt(j, new Date()));
       const gap = Math.round(j.percent - expected);
       return `<tr>
         <td>${escapeHtml(j.tag)}</td><td>${escapeHtml(j.workType)}</td>
@@ -462,14 +461,6 @@ for (let t = minStart.getTime(); t <= maxEnd.getTime(); t += stepDays * 86400000
         </table>
       </div>
     `;
-    function stepStatus(step){
-  if (!step.start || !step.finish) return null;
-  const expected = progressFrac(new Date(step.start), new Date(step.finish), new Date()) * 100;
-  const diff = (step.percent || 0) - expected;
-  if (diff >= 5) return { label: "เร็ว", cls: "ahead" };
-  if (diff <= -5) return { label: "ช้า", cls: "behind" };
-  return { label: "ตามแผน", cls: "ontrack" };
-}
   }
 
   function renderJobTable(display){
@@ -477,7 +468,6 @@ for (let t = minStart.getTime(); t <= maxEnd.getTime(); t += stepDays * 86400000
     const emptyNote = document.getElementById("jobEmptyNote");
     if (!display.length){ tbody.innerHTML = ""; emptyNote.style.display = "block"; return; }
     emptyNote.style.display = "none";
-
     let html = "";
     display.forEach(j => {
       const st = statusOf(j);
@@ -499,14 +489,12 @@ for (let t = minStart.getTime(); t <= maxEnd.getTime(); t += stepDays * 86400000
       `;
     });
     tbody.innerHTML = html;
-
     tbody.querySelectorAll("tr.job-row").forEach(row => {
       row.addEventListener("click", () => {
         const key = row.getAttribute("data-key");
         const detailRow = tbody.querySelector(`tr.detail-row[data-key-detail="${CSS.escape(key)}"]`);
         const job = display.find(j => jobKey(j) === key);
         if (!detailRow || !job) return;
-
         const nowExpanded = !row.classList.contains("expanded");
         if (nowExpanded){
           expandedKeys.add(key);
@@ -523,13 +511,13 @@ for (let t = minStart.getTime(); t <= maxEnd.getTime(); t += stepDays * 86400000
     });
   }
 
-function render(){
-  const { scope, display, plantF, sectionF, typeF } = getScope();
-  renderKpis(scope, display);
-  renderChart(scope, plantF, sectionF, typeF);
-  renderDelayTable(scope);
-  renderJobTable(display);
-}
+  function render(){
+    const { scope, display, plantF, sectionF, typeF } = getScope();
+    renderKpis(scope, display);
+    renderChart(scope, plantF, sectionF, typeF);
+    renderDelayTable(scope);
+    renderJobTable(display);
+  }
 
   function updateStatusLine(ok){
     if (ok){
@@ -552,26 +540,25 @@ function render(){
       if (payload.error) throw new Error(payload.error);
       if (!payload.jobs || !payload.jobs.length) throw new Error("ไม่พบข้อมูลงานจาก Apps Script");
 
-jobs = payload.jobs.map(j => ({
-  id: j.id,
-  plant: j.plant || "ไม่ระบุ Plant",
-  section: j.section || "",
-  tag: j.tag || "",
-  desc: j.desc || "",
-  workType: j.workType || UNSPECIFIED_TYPE,
-  percent: j.percent || 0,
-  start: j.start ? new Date(j.start) : null,
-  finish: j.finish ? new Date(j.finish) : null,
-  steps: Array.isArray(j.steps) ? j.steps : [],
-  history: Array.isArray(j.history) ? j.history : [],
-}));
+      jobs = payload.jobs.map(j => ({
+        id: j.id,
+        plant: j.plant || "ไม่ระบุ Plant",
+        section: j.section || "",
+        tag: j.tag || "",
+        desc: j.desc || "",
+        workType: j.workType || UNSPECIFIED_TYPE,
+        percent: j.percent || 0,
+        start: j.start ? new Date(j.start) : null,
+        finish: j.finish ? new Date(j.finish) : null,
+        steps: Array.isArray(j.steps) ? j.steps : [],
+        history: Array.isArray(j.history) ? j.history : [],
+      }));
 
       lastFetchedAt = Date.now();
       errorBanner.style.display = "none";
       populateFilters();
       render();
       updateStatusLine(true);
-
       if (payload.lastUpdated){
         lastUpdatedEl.innerText = `ข้อมูลซิงก์ล่าสุดจาก Google Drive: ${payload.lastUpdated}`;
       }
@@ -593,13 +580,12 @@ jobs = payload.jobs.map(j => ({
   }
 
   plantFilterEl.addEventListener("change", () => {
-  // เปลี่ยน Plant แล้ว reset Section/ประเภทงาน เพราะ Section ของ Plant เดิมอาจไม่มีใน Plant ใหม่
-  sectionFilterEl.value = "ALL";
-  typeFilterEl.value = "ALL";
-  populateFilters();
-  render();
-});
-[sectionFilterEl, typeFilterEl, statusFilterEl].forEach(el => el.addEventListener("change", render));
+    sectionFilterEl.value = "ALL";
+    typeFilterEl.value = "ALL";
+    populateFilters();
+    render();
+  });
+  [sectionFilterEl, typeFilterEl, statusFilterEl].forEach(el => el.addEventListener("change", render));
   document.getElementById("refreshBtn").addEventListener("click", () => fetchAndRender(false));
 
   let resizeTimer;
@@ -610,7 +596,6 @@ jobs = payload.jobs.map(j => ({
 
   fetchAndRender(true);
   startPolling();
-
 })();
 </script>
 </body>
