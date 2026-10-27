@@ -449,6 +449,14 @@ for (let t = minStart.getTime(); t <= maxEnd.getTime(); t += stepDays * 86400000
         </table>
       </div>
     `;
+    function stepStatus(step){
+  if (!step.start || !step.finish) return null;
+  const expected = progressFrac(new Date(step.start), new Date(step.finish), new Date()) * 100;
+  const diff = (step.percent || 0) - expected;
+  if (diff >= 5) return { label: "เร็ว", cls: "ahead" };
+  if (diff <= -5) return { label: "ช้า", cls: "behind" };
+  return { label: "ตามแผน", cls: "ontrack" };
+}
   }
 
   function renderJobTable(display){
