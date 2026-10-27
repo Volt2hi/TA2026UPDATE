@@ -112,6 +112,10 @@
   </div>
   <div class="filters">
     <div class="filter-group">
+       <label>Plant / โรงงาน</label>
+    <select id="plantFilter"><option value="ALL">ทั้งหมด</option></select>
+  </div>
+  <div class="filter-group">
       <label>Section / พื้นที่</label>
       <select id="sectionFilter"><option value="ALL">ทั้งหมด</option></select>
     </div>
@@ -251,6 +255,7 @@ function expectedPercentAt(job, asOfDate) {
   let pollTimer = null;
   let expandedKeys = new Set();
 
+  const plantFilterEl = document.getElementById("plantFilter");
   const sectionFilterEl = document.getElementById("sectionFilter");
   const typeFilterEl = document.getElementById("typeFilter");
   const statusFilterEl = document.getElementById("statusFilter");
@@ -261,25 +266,32 @@ function expectedPercentAt(job, asOfDate) {
   function jobKey(j){ return String(j.id); }
 
   function populateFilters(){
-    const sections = [...new Set(jobs.map(j => j.section).filter(Boolean))].sort();
-    const types = [...new Set(jobs.map(j => j.workType).filter(Boolean))].sort();
-    const prevSection = sectionFilterEl.value, prevType = typeFilterEl.value;
-    sectionFilterEl.innerHTML = '<option value="ALL">ทั้งหมด</option>' +
-      sections.map(s => `<option value="${escapeHtml(s)}">${escapeHtml(s)}</option>`).join("");
-    typeFilterEl.innerHTML = '<option value="ALL">ทั้งหมด</option>' +
-      types.map(t => `<option value="${escapeHtml(t)}">${escapeHtml(t)}</option>`).join("");
-    if (sections.includes(prevSection)) sectionFilterEl.value = prevSection;
-    if (types.includes(prevType)) typeFilterEl.value = prevType;
-  }
+  const plants = [...new Set(jobs.map(j => j.plant).filter(Boolean))].sort();
+  const prevPlant = plantFilterEl.value;
+  plantFilterEl.innerHTML = '<option value="ALL">ทั้งหมด</option>' +
+    plants.map(p => `<option value="${escapeHtml(p)}">${escapeHtml(p)}</option>`).join("");
+  if (plants.includes(prevPlant)) plantFilterEl.value = prevPlant;
 
-  function getScope(){
-    const sectionF = sectionFilterEl.value, typeF = typeFilterEl.value, statusF = statusFilterEl.value;
-    let scope = jobs;
-    if (sectionF !== "ALL") scope = scope.filter(j => j.section === sectionF);
-    if (typeF !== "ALL") scope = scope.filter(j => j.workType === typeF);
-    const display = statusF === "ALL" ? scope : scope.filter(j => statusOf(j).cls === statusF);
-    return { scope, display, sectionF, typeF, statusF };
-  }
+  const plantScoped = plantFilterEl.value === "ALL" ? jobs : jobs.filter(j => j.plant === plantFilterEl.value);
+  const sections = [...new Set(plantScoped.map(j => j.section).filter(Boolean))].sort();
+  const types = [...new Set(plantScoped.map(j => j.workType).filter(Boolean))].sort();
+  const prevSection = sectionFilterEl.value, prevType = typeFilterEl.value;
+  sectionFilterEl.innerHTML = '<option value="ALL">ทั้งหมด</option>' +
+    sections.map(s => `<option value="${escapeHtml(s)}">${escapeHtml(s)}</option>`).join("");
+  typeFilterEl.innerHTML = '<option value="ALL">ทั้งหมด</option>' +
+    types.map(t => `<option value="${escapeHtml(t)}">${escapeHtml(t)}</option>`).join("");
+  if (sections.includes(prevSection)) sectionFilterEl.value = prevSection;
+  if (types.includes(prevType)) typeFilterEl.value = prevType;
+}
+function getScope(){
+  const plantF = plantFilterEl.value, sectionF = sectionFilterEl.value, typeF = typeFilterEl.value, statusF = statusFilterEl.value;
+  let scope = jobs;
+  if (plantF !== "ALL") scope = scope.filter(j => j.plant === plantF);
+  if (sectionF !== "ALL") scope = scope.filter(j => j.section === sectionF);
+  if (typeF !== "ALL") scope = scope.filter(j => j.workType === typeF);
+  const display = statusF === "ALL" ? scope : scope.filter(j => statusOf(j).cls === statusF);
+  return { scope, display, plantF, sectionF, typeF, statusF };
+}
 
   function renderKpis(scope, display){
     const overallPct = jobs.length ? weightedAvg(jobs.map(j => [j.percent, durationDays(j.start, j.finish)])) : 0;
@@ -298,11 +310,12 @@ function expectedPercentAt(job, asOfDate) {
     document.getElementById("jobCountBadge").innerText = `${jobs.length} งาน`;
   }
 
-  function renderChart(scope, sectionF, typeF){
-    const dated = scope.filter(j => j.start && j.finish);
-    const labelParts = [];
-    if (sectionF !== "ALL") labelParts.push("Section: " + sectionF);
-    if (typeF !== "ALL") labelParts.push("ประเภท: " + typeF);
+function renderChart(scope, plantF, sectionF, typeF){
+  const dated = scope.filter(j => j.start && j.finish);
+  const labelParts = [];
+  if (plantF !== "ALL") labelParts.push("Plant: " + plantF);
+  if (sectionF !== "ALL") labelParts.push("Section: " + sectionF);
+  if (typeF !== "ALL") labelParts.push("ประเภท: " + typeF);
     document.getElementById("chartScopeLabel").innerText = labelParts.length ? labelParts.join(" • ") : "ภาพรวมทั้งหมด";
 
     const ctx = document.getElementById("sCurveChart").getContext("2d");
@@ -510,13 +523,13 @@ for (let t = minStart.getTime(); t <= maxEnd.getTime(); t += stepDays * 86400000
     });
   }
 
-  function render(){
-    const { scope, display, sectionF, typeF } = getScope();
-    renderKpis(scope, display);
-    renderChart(scope, sectionF, typeF);
-    renderDelayTable(scope);
-    renderJobTable(display);
-  }
+function render(){
+  const { scope, display, plantF, sectionF, typeF } = getScope();
+  renderKpis(scope, display);
+  renderChart(scope, plantF, sectionF, typeF);
+  renderDelayTable(scope);
+  renderJobTable(display);
+}
 
   function updateStatusLine(ok){
     if (ok){
@@ -539,18 +552,19 @@ for (let t = minStart.getTime(); t <= maxEnd.getTime(); t += stepDays * 86400000
       if (payload.error) throw new Error(payload.error);
       if (!payload.jobs || !payload.jobs.length) throw new Error("ไม่พบข้อมูลงานจาก Apps Script");
 
-      jobs = payload.jobs.map(j => ({
-        id: j.id,
-        section: j.section || "",
-        tag: j.tag || "",
-        desc: j.desc || "",
-        workType: j.workType || UNSPECIFIED_TYPE,
-        percent: j.percent || 0,
-        start: j.start ? new Date(j.start) : null,
-        finish: j.finish ? new Date(j.finish) : null,
-        steps: Array.isArray(j.steps) ? j.steps : [],
-        history: Array.isArray(j.history) ? j.history : [],
-      }));
+jobs = payload.jobs.map(j => ({
+  id: j.id,
+  plant: j.plant || "ไม่ระบุ Plant",
+  section: j.section || "",
+  tag: j.tag || "",
+  desc: j.desc || "",
+  workType: j.workType || UNSPECIFIED_TYPE,
+  percent: j.percent || 0,
+  start: j.start ? new Date(j.start) : null,
+  finish: j.finish ? new Date(j.finish) : null,
+  steps: Array.isArray(j.steps) ? j.steps : [],
+  history: Array.isArray(j.history) ? j.history : [],
+}));
 
       lastFetchedAt = Date.now();
       errorBanner.style.display = "none";
@@ -578,7 +592,14 @@ for (let t = minStart.getTime(); t <= maxEnd.getTime(); t += stepDays * 86400000
     pollTimer = setInterval(() => fetchAndRender(false), POLL_INTERVAL_MS);
   }
 
-  [sectionFilterEl, typeFilterEl, statusFilterEl].forEach(el => el.addEventListener("change", render));
+  plantFilterEl.addEventListener("change", () => {
+  // เปลี่ยน Plant แล้ว reset Section/ประเภทงาน เพราะ Section ของ Plant เดิมอาจไม่มีใน Plant ใหม่
+  sectionFilterEl.value = "ALL";
+  typeFilterEl.value = "ALL";
+  populateFilters();
+  render();
+});
+[sectionFilterEl, typeFilterEl, statusFilterEl].forEach(el => el.addEventListener("change", render));
   document.getElementById("refreshBtn").addEventListener("click", () => fetchAndRender(false));
 
   let resizeTimer;
