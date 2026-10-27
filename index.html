@@ -191,14 +191,35 @@
     if (asOf >= finish) return 1;
     return (asOf - start) / (finish - start);
   }
-  function statusOf(job){
-    if (!job.start || !job.finish) return { label: "ไม่มีแผน", cls: "neutral" };
-    const expected = progressFrac(job.start, job.finish, new Date()) * 100;
-    const diff = job.percent - expected;
-    if (diff >= 5) return { label: "เร็วกว่าแผน", cls: "ahead" };
-    if (diff <= -5) return { label: "ล่าช้า", cls: "behind" };
-    return { label: "ตามแผน", cls: "ontrack" };
+function statusOf(job){
+  if (!job.start || !job.finish) return { label: "ไม่มีแผน", cls: "neutral" };
+  const expected = expectedPercentAt(job, new Date());   // << เปลี่ยนจาก progressFrac(...)*100 เดิม
+  const diff = job.percent - expected;
+  if (diff >= 5) return { label: "เร็วกว่าแผน", cls: "ahead" };
+  if (diff <= -5) return { label: "ล่าช้า", cls: "behind" };
+  return { label: "ตามแผน", cls: "ontrack" };
+}
+  /** คำนวณ % ที่ "ควรจะเป็น" ของงาน ณ วันที่กำหนด โดยใช้ plan weight + start/finish ของแต่ละขั้นตอนย่อย
+ *  แม่นยำกว่าการลากเส้นตรงจาก job.start ถึง job.finish มาก เพราะสะท้อนว่าแต่ละช่วงงานหนักเบาต่างกัน
+ *  ถ้างานไม่มีขั้นตอนย่อย หรือขั้นตอนไม่มีวันที่ของตัวเอง จะ fallback ไปใช้เส้นตรงแบบเดิม */
+function expectedPercentAt(job, asOfDate) {
+  const stepsWithDates = (job.steps || []).filter(s => s.start && s.finish && s.planWeight !== null);
+  if (!stepsWithDates.length) {
+    // fallback: ไม่มีข้อมูลวันที่ระดับขั้นตอน ใช้เส้นตรงทั้งงานแบบเดิม
+    return progressFrac(job.start, job.finish, asOfDate) * 100;
   }
+  const totalWeight = stepsWithDates.reduce((sum, s) => sum + s.planWeight, 0);
+  if (totalWeight <= 0) return progressFrac(job.start, job.finish, asOfDate) * 100;
+
+  const weightedSum = stepsWithDates.reduce((sum, s) => {
+    const stepStart = new Date(s.start);
+    const stepFinish = new Date(s.finish);
+    const frac = progressFrac(stepStart, stepFinish, asOfDate); // 0-1
+    return sum + s.planWeight * frac;
+  }, 0);
+
+  return (weightedSum / totalWeight) * 100;
+}
   function fmtDate(d){
     if (!d) return "-";
     const yyyy = d.getFullYear(), mm = String(d.getMonth()+1).padStart(2,"0"), dd = String(d.getDate()).padStart(2,"0");
@@ -310,9 +331,13 @@
     const allDates = [...allDatesSet.values()].sort((a,b) => a - b);
 
     const labels = allDates.map(d => fmtDate(d));
-    const planValues = allDates.map(dt =>
-      Math.round(weightedAvg(scope.map(j => [progressFrac(j.start, j.finish, dt) * 100, durationDays(j.start, j.finish)])) * 10) / 10
-    );
+  const planValues = [];
+for (let t = minStart.getTime(); t <= maxEnd.getTime(); t += stepDays * 86400000){
+  const dt = new Date(t);
+  labels.push(fmtDate(dt));
+  const planVal = weightedAvg(scope.map(j => [expectedPercentAt(j, dt), durationDays(j.start, j.finish)]));  // << เปลี่ยนตรงนี้
+  planValues.push(Math.round(planVal * 10) / 10);
+}
     const actualValues = allDates.map(dt => {
       if (dt > today) return null; // ไม่เดาอนาคต
       const vals = scope.map(j => [interpolateJobHistory(j.history || [], dt), durationDays(j.start, j.finish)]);
