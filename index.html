@@ -26,7 +26,6 @@
   }
   button.secondary{background:var(--panel2); color:var(--teal);}
   button:hover{filter:brightness(1.1);}
-
   .toolbar{
     display:flex; gap:10px; flex-wrap:wrap; align-items:center;
     background:var(--panel); border:1px solid var(--border); border-radius:10px;
@@ -39,7 +38,6 @@
     background:var(--panel); color:var(--text); border:1px solid var(--border);
     padding:7px 10px; border-radius:6px; font-size:12px; min-width:170px;
   }
-
   .kpi-row{display:flex; gap:12px; flex-wrap:wrap; margin-bottom:18px;}
   .kpi-card{
     background:var(--panel); border:1px solid var(--border); border-radius:10px;
@@ -50,14 +48,12 @@
   .kpi-card.ahead .value{color:var(--green);}
   .kpi-card.ontrack .value{color:var(--teal);}
   .kpi-card.behind .value{color:var(--red);}
-
   .chart-wrap{
     background:var(--panel); border:1px solid var(--border); border-radius:10px;
     padding:14px; margin-bottom:20px; position:relative; height:340px;
   }
   .chart-head{display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;}
   .chart-head span{font-size:12px; color:var(--muted);}
-
   .table-wrap{
     background:var(--panel); border:1px solid var(--border); border-radius:10px;
     overflow:auto; max-height:420px;
@@ -71,7 +67,6 @@
   .status-behind{color:var(--red); font-weight:700;}
   .status-neutral{color:var(--muted);}
   .empty-note{color:var(--muted); font-size:12px; padding:16px;}
-
   .badge{
     display:inline-block; padding:2px 8px; border-radius:999px; font-size:10px;
     background:var(--panel2); color:var(--teal); border:1px solid var(--border);
@@ -80,28 +75,23 @@
     background:#3a1414; border:1px solid var(--red); color:#fecaca;
     padding:10px 14px; border-radius:8px; font-size:12px; margin-bottom:16px; display:none;
   }
-
   footer{color:var(--muted); font-size:10.5px; margin-top:26px; text-align:center;}
 </style>
 </head>
 <body>
-
   <h1>Turnaround Progress Dashboard</h1>
   <div class="caption">
     <span><span class="status-dot" id="statusDot"></span><span id="lastUpdated">กำลังโหลดข้อมูล...</span></span>
     <span class="badge" id="jobCountBadge">0 งาน</span>
   </div>
-
   <div class="error-banner" id="errorBanner"></div>
-
   <div class="toolbar">
     <span style="font-size:12px;color:var(--muted);">
-      ข้อมูลดึงจากไฟล์ <code>data.csv</code> ในที่เก็บเดียวกันโดยอัตโนมัติ และรีเฟรชทุก 30 วินาที —
-      ไม่ต้องอัปโหลดอะไร เพียงรอให้ผู้ดูแลอัปเดตไฟล์
+      ข้อมูลดึงจาก Google Apps Script (ซิงก์จากไฟล์ Excel ใน Google Drive ทุก 15 นาที) และรีเฟรชหน้านี้ทุก 30 วินาที —
+      ไม่ต้องทำอะไร เพียงรอให้ผู้ดูแลอัปเดตไฟล์ต้นทาง
     </span>
     <button class="secondary" id="refreshBtn">รีเฟรชตอนนี้</button>
   </div>
-
   <div class="filters">
     <div class="filter-group">
       <label>Section / พื้นที่</label>
@@ -121,9 +111,7 @@
       </select>
     </div>
   </div>
-
   <div class="kpi-row" id="kpiRow"></div>
-
   <div class="chart-wrap">
     <div class="chart-head">
       <strong style="font-size:13px;">S-Curve: แผนงาน</strong>
@@ -131,7 +119,6 @@
     </div>
     <canvas id="sCurveChart"></canvas>
   </div>
-
   <h3>⚠ งานที่ล่าช้ากว่าแผน</h3>
   <div class="table-wrap">
     <table id="delayTable">
@@ -143,7 +130,6 @@
     </table>
     <div class="empty-note" id="delayEmptyNote" style="display:none;">ไม่มีงานล่าช้าในขอบเขตนี้</div>
   </div>
-
   <h3>รายการงานทั้งหมด</h3>
   <div class="table-wrap">
     <table id="jobTable">
@@ -155,7 +141,6 @@
     </table>
     <div class="empty-note" id="jobEmptyNote" style="display:none;">ยังไม่มีข้อมูล</div>
   </div>
-
   <footer>Turnaround Progress Dashboard — ข้อมูลอัปเดตโดยทีมผู้ดูแลเท่านั้น ผู้เข้าชมไม่ต้องทำอะไรเพิ่ม</footer>
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.5.1/dist/chart.umd.min.js"></script>
@@ -164,144 +149,13 @@
   "use strict";
 
   // ============================================================
-  // ---------------- แก้ตรงนี้ถ้าเปลี่ยนชื่อไฟล์ข้อมูล ----------------
+  // ---------------- แก้บรรทัดนี้ให้เป็น URL จริงจากตอน Deploy ----------------
   // ============================================================
-  const DATA_URL = "data.csv";       // ไฟล์ CSV ที่ผู้ดูแลอัปโหลดทับใน repo เดียวกัน
-  const POLL_INTERVAL_MS = 30000;    // รีเฟรชข้อมูลอัตโนมัติทุก 30 วินาที
-  const STALE_AFTER_MS = 1000 * 60 * 60 * 6; // ถ้าไฟล์ไม่เปลี่ยนเกิน 6 ชม. ให้ขึ้นจุดเตือนสีเหลือง
+  const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxxxxxxxxxxxxxxxxxxxxxx/exec"; // << แก้ตรงนี้
+  const POLL_INTERVAL_MS = 30000;                 // รีเฟรชข้อมูลอัตโนมัติทุก 30 วินาที
+  const STALE_AFTER_MS = 1000 * 60 * 60 * 6;      // ถ้าไฟล์ไม่เปลี่ยนเกิน 6 ชม. ให้ขึ้นจุดเตือนสีเหลือง
 
-  // ============================================================
-  // ------------------- Column name matching -------------------
-  // ============================================================
-  const FIELD_SYNONYMS = {
-    work_type: ["work type", "worktype", "ประเภทงาน", "ประเภท"],
-    section:   ["section", "sec."],
-    tag:       ["tag"],
-    desc:      ["description", "desc", "รายละเอียด"],
-    percent:   ["% complete", "percent", "pct", "complete"],
-    start:     ["start"],
-    finish:    ["finish"],
-  };
   const UNSPECIFIED_TYPE = "ไม่ระบุประเภท";
-
-  function normHeader(text){
-    if (text === null || text === undefined) return "";
-    return String(text).replace(/\n/g," ").trim().toLowerCase().replace(/\s+/g," ");
-  }
-
-  function detectHeaderAndColumns(rows){
-    let headerRow = -1;
-    for (let r=0; r<Math.min(10, rows.length); r++){
-      for (let c=0; c<rows[r].length; c++){
-        if (normHeader(rows[r][c]).indexOf("tag") !== -1){ headerRow = r; break; }
-      }
-      if (headerRow !== -1) break;
-    }
-    if (headerRow === -1) headerRow = 0;
-    const colMap = {}; Object.keys(FIELD_SYNONYMS).forEach(f => colMap[f] = -1);
-    const header = rows[headerRow] || [];
-    for (let c=0; c<header.length; c++){
-      const norm = normHeader(header[c]);
-      if (!norm) continue;
-      for (const field in FIELD_SYNONYMS){
-        if (colMap[field] !== -1) continue;
-        if (FIELD_SYNONYMS[field].some(kw => norm.indexOf(kw) !== -1)) colMap[field] = c;
-      }
-    }
-    return { headerRow, colMap };
-  }
-
-  // ============================================================
-  // ------------------------- CSV parsing ------------------------
-  // ============================================================
-  function parseCSV(text){
-    const rows = [];
-    let row = [], field = "", inQuotes = false;
-    for (let i=0; i<text.length; i++){
-      const ch = text[i], next = text[i+1];
-      if (inQuotes){
-        if (ch === '"' && next === '"'){ field += '"'; i++; }
-        else if (ch === '"'){ inQuotes = false; }
-        else field += ch;
-      } else {
-        if (ch === '"'){ inQuotes = true; }
-        else if (ch === ','){ row.push(field); field = ""; }
-        else if (ch === '\r'){ /* skip */ }
-        else if (ch === '\n'){ row.push(field); rows.push(row); row = []; field = ""; }
-        else field += ch;
-      }
-    }
-    if (field.length || row.length){ row.push(field); rows.push(row); }
-    return rows.filter(r => r.some(c => String(c).trim() !== ""));
-  }
-
-  function parseDateValue(raw){
-    if (raw === null || raw === undefined || raw === "") return null;
-    const s = String(raw).trim();
-    if (!s) return null;
-    let d = new Date(s.replace(" ", "T"));
-    if (!isNaN(d)) return d;
-    const m = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})(?:[ T](\d{1,2}):(\d{2})(?::(\d{2}))?)?$/);
-    if (m){
-      let [, dd, mm, yyyy, hh, mi, ss] = m;
-      if (yyyy.length === 2) yyyy = "20" + yyyy;
-      d = new Date(+yyyy, +mm - 1, +dd, +(hh||0), +(mi||0), +(ss||0));
-      if (!isNaN(d)) return d;
-    }
-    return null;
-  }
-
-  function toPct(raw){
-    if (raw === null || raw === undefined || raw === "") return 0;
-    const v = parseFloat(String(raw).replace("%","").trim());
-    if (isNaN(v)) return 0;
-    return v <= 1 ? v * 100 : v;
-  }
-
-  function getWorkType(raw){
-    if (raw === null || raw === undefined) return UNSPECIFIED_TYPE;
-    const text = String(raw).trim();
-    return text ? text : UNSPECIFIED_TYPE;
-  }
-
-  // ============================================================
-  // ------------------- Build job hierarchy ----------------------
-  // ============================================================
-  function buildJobs(rows){
-    const { headerRow, colMap } = detectHeaderAndColumns(rows);
-    const jobs = [];
-    let current = null;
-    for (let r = headerRow + 1; r < rows.length; r++){
-      const row = rows[r];
-      const tag  = colMap.tag  !== -1 ? row[colMap.tag]  : null;
-      const desc = colMap.desc !== -1 ? row[colMap.desc] : null;
-      const tagStr = tag !== null && tag !== undefined ? String(tag).trim() : "";
-      const descStr = desc !== null && desc !== undefined ? String(desc).trim() : "";
-
-      if (tagStr){
-        const section = colMap.section !== -1 ? row[colMap.section] : null;
-        const workTypeRaw = colMap.work_type !== -1 ? row[colMap.work_type] : null;
-        const pctRaw = colMap.percent !== -1 ? row[colMap.percent] : null;
-        const start = colMap.start !== -1 ? parseDateValue(row[colMap.start]) : null;
-        const finish = colMap.finish !== -1 ? parseDateValue(row[colMap.finish]) : null;
-        current = {
-          section: section !== null && section !== undefined && String(section).trim() !== "" ? String(section).trim() : "",
-          tag: tagStr, desc: descStr, ownPercent: toPct(pctRaw),
-          start, finish, workType: getWorkType(workTypeRaw), steps: []
-        };
-        jobs.push(current);
-      } else if (descStr && current){
-        const pctRaw = colMap.percent !== -1 ? row[colMap.percent] : null;
-        current.steps.push({ desc: descStr, percent: toPct(pctRaw) });
-      }
-    }
-    jobs.forEach(j => {
-      j.percent = j.steps.length
-        ? weightedAvg(j.steps.map(s => [s.percent, 1]))
-        : j.ownPercent;
-    });
-    return jobs;
-  }
 
   // ============================================================
   // --------------------------- Helpers --------------------------
@@ -363,7 +217,6 @@
       sections.map(s => `<option value="${escapeHtml(s)}">${escapeHtml(s)}</option>`).join("");
     typeFilterEl.innerHTML = '<option value="ALL">ทั้งหมด</option>' +
       types.map(t => `<option value="${escapeHtml(t)}">${escapeHtml(t)}</option>`).join("");
-    // คงค่าตัวกรองเดิมไว้ถ้ายังมีอยู่ในข้อมูลใหม่ (กันไม่ให้ตัวกรอง reset ทุกครั้งที่ auto-refresh)
     if (sections.includes(prevSection)) sectionFilterEl.value = prevSection;
     if (types.includes(prevType)) typeFilterEl.value = prevType;
   }
@@ -499,38 +352,50 @@
       const isStale = ageMs > STALE_AFTER_MS;
       statusDot.className = "status-dot" + (isStale ? " stale" : "");
       lastUpdatedEl.innerText = `ข้อมูลล่าสุดดึงเมื่อ ${new Date(lastFetchedAt).toLocaleString("th-TH")}`
-        + (isStale ? " (ไม่มีการอัปเดตมานาน — อาจรอผู้ดูแลอัปโหลดไฟล์ใหม่)" : "");
+        + (isStale ? " (ไม่มีการอัปเดตมานาน — อาจรอผู้ดูแลอัปเดตไฟล์ใหม่)" : "");
     } else {
       statusDot.className = "status-dot error";
     }
   }
 
   // ============================================================
-  // ---------------- ดึง data.csv จาก repo อัตโนมัติ ------------------
+  // --------------- ดึงข้อมูลจาก Apps Script (JSON) อัตโนมัติ ---------------
   // ============================================================
   async function fetchAndRender(isFirstLoad){
     try {
-      const resp = await fetch(DATA_URL + "?t=" + Date.now(), { cache: "no-store" });
-      if (!resp.ok) throw new Error("โหลดไฟล์ไม่สำเร็จ (HTTP " + resp.status + ")");
-      const text = await resp.text();
-      const rows = parseCSV(text);
-      const parsed = buildJobs(rows);
-      if (!parsed.length) throw new Error("ไม่พบข้อมูลงาน (TAG) ในไฟล์ data.csv");
+      const url = APPS_SCRIPT_URL + "?format=json&t=" + Date.now();
+      const resp = await fetch(url, { cache: "no-store" });
+      if (!resp.ok) throw new Error("โหลดข้อมูลไม่สำเร็จ (HTTP " + resp.status + ")");
+      const payload = await resp.json();
+      if (payload.error) throw new Error(payload.error);
+      if (!payload.jobs || !payload.jobs.length) throw new Error("ไม่พบข้อมูลงานจาก Apps Script");
 
-      jobs = parsed;
+      jobs = payload.jobs.map(j => ({
+        section: j.section || "",
+        tag: j.tag || "",
+        desc: j.desc || "",
+        workType: j.workType || UNSPECIFIED_TYPE,
+        percent: j.percent || 0,
+        start: j.start ? new Date(j.start) : null,
+        finish: j.finish ? new Date(j.finish) : null,
+      }));
+
       lastFetchedAt = Date.now();
       errorBanner.style.display = "none";
       populateFilters();
       render();
       updateStatusLine(true);
+
+      if (payload.lastUpdated){
+        lastUpdatedEl.innerText = `ข้อมูลซิงก์ล่าสุดจาก Google Drive: ${payload.lastUpdated}`;
+      }
     } catch (err) {
       updateStatusLine(false);
       if (isFirstLoad){
         errorBanner.style.display = "block";
         errorBanner.innerText =
-          `ยังไม่พบไฟล์ data.csv ในที่เก็บนี้ (${err.message}) — กรุณาให้ผู้ดูแลอัปโหลดไฟล์ data.csv ไว้ในโฟลเดอร์เดียวกับ index.html`;
+          `ดึงข้อมูลจาก Apps Script ไม่สำเร็จ (${err.message}) — ตรวจสอบว่าแก้ APPS_SCRIPT_URL เป็น URL จริงแล้ว และตั้งค่า Deploy "Who has access" เป็น Anyone`;
       } else {
-        // ครั้งถัดไปถ้าโหลดพลาด ไม่รบกวนผู้ใช้ด้วย banner ซ้ำ แค่เปลี่ยนจุดสถานะเป็นสีแดงชั่วคราว
         console.warn("Auto-refresh โหลดข้อมูลไม่สำเร็จ:", err.message);
       }
     }
