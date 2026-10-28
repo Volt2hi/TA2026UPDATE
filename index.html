@@ -7,7 +7,7 @@
   :root{
     --bg:#0b1b23; --panel:#102a33; --panel2:#153640; --border:#20424d;
     --text:#e6f1f3; --muted:#8fb0b6; --teal:#2dd4bf; --teal-dark:#0f766e;
-    --amber:#f59e0b; --green:#22c55e; --red:#ef4444;
+    --amber:#f59e0b; --green:#22c55e; --red:#ef4444; --yellow:#facc15;
   }
   *{box-sizing:border-box;}
   body{
@@ -52,8 +52,10 @@
     background:var(--panel); border:1px solid var(--border); border-radius:10px;
     padding:14px; margin-bottom:20px; position:relative; height:360px;
   }
-  .chart-head{display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;}
-  .chart-head span{font-size:12px; color:var(--muted);}
+  .chart-head{display:flex; justify-content:space-between; align-items:center; margin-bottom:6px; flex-wrap:wrap; gap:8px;}
+  .chart-head-right{display:flex; align-items:center; gap:10px;}
+  .chart-head span.scope-label{font-size:12px; color:var(--muted); max-width:460px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+  .chart-head span.scope-label.focused{color:var(--teal); font-weight:600;}
   .table-wrap{
     background:var(--panel); border:1px solid var(--border); border-radius:10px;
     overflow:auto; max-height:460px;
@@ -63,6 +65,7 @@
   th{background:var(--panel2); color:var(--muted); position:sticky; top:0; font-weight:600;}
   tr.job-row{cursor:pointer;}
   tr.job-row:hover td{background:#123038;}
+  tr.job-row.focused td{background:#0f3330;}
   tr.job-row td.job-name-cell{white-space:normal;}
   .expand-icon{
     display:inline-block; width:14px; text-align:center; margin-right:6px;
@@ -76,6 +79,12 @@
   table.step-table{ width:100%; border-collapse:collapse; font-size:11.8px; margin-top:4px; }
   table.step-table th{ background:transparent; color:var(--muted); position:static; font-weight:600; padding:4px 8px; border-bottom:1px solid var(--border); }
   table.step-table td{ padding:5px 8px; border-bottom:1px solid #16343c; white-space:normal; }
+  tr.step-row-inspection td{ background:rgba(250,204,21,0.07); border-left:3px solid var(--yellow); }
+  .inspection-badge{
+    display:inline-block; background:rgba(250,204,21,0.18); color:var(--yellow);
+    font-size:10px; font-weight:700; padding:1px 7px; border-radius:999px; margin-left:6px;
+    border:1px solid rgba(250,204,21,0.4);
+  }
   .step-bar-cell{ display:flex; align-items:center; gap:8px; min-width:150px; }
   .step-bar-outer{ flex:1; height:6px; background:#0a1b21; border-radius:999px; overflow:hidden; min-width:70px; }
   .step-bar-inner{ height:100%; background:linear-gradient(90deg,var(--teal-dark),var(--teal)); }
@@ -106,7 +115,7 @@
   <div class="toolbar">
     <span style="font-size:12px;color:var(--muted);">
       ข้อมูลดึงจาก Google Apps Script (ซิงก์จากไฟล์ Excel ใน Google Drive ทุก 15 นาที) และรีเฟรชหน้านี้ทุก 30 วินาที —
-      คลิกที่แถวงานเพื่อดูรายละเอียดขั้นตอนย่อย (Plan% / Actual% ของแต่ละขั้นตอน)
+      คลิกที่แถวงานเพื่อดูรายละเอียดขั้นตอนย่อย <strong>และกราฟจะเปลี่ยนไปโฟกัสงานนั้นโดยอัตโนมัติ</strong>
     </span>
     <button class="secondary" id="refreshBtn">รีเฟรชตอนนี้</button>
   </div>
@@ -137,7 +146,10 @@
   <div class="chart-wrap">
     <div class="chart-head">
       <strong style="font-size:13px;">S-Curve: แผน (Plan) เทียบ จริง (Actual)</strong>
-      <span id="chartScopeLabel">ภาพรวมทั้งหมด</span>
+      <div class="chart-head-right">
+        <span class="scope-label" id="chartScopeLabel">ภาพรวมทั้งหมด</span>
+        <button class="secondary" id="resetChartBtn" style="display:none;">⟲ กลับไปภาพรวม</button>
+      </div>
     </div>
     <canvas id="sCurveChart"></canvas>
   </div>
@@ -152,7 +164,7 @@
     </table>
     <div class="empty-note" id="delayEmptyNote" style="display:none;">ไม่มีงานล่าช้าในขอบเขตนี้</div>
   </div>
-  <h3>รายการงานทั้งหมด <span style="font-weight:400;color:var(--muted);font-size:11.5px;">(คลิกที่แถวเพื่อดูรายละเอียดขั้นตอนย่อย)</span></h3>
+  <h3>รายการงานทั้งหมด <span style="font-weight:400;color:var(--muted);font-size:11.5px;">(คลิกที่แถวเพื่อดูรายละเอียดและโฟกัสกราฟ)</span></h3>
   <div class="table-wrap">
     <table id="jobTable">
       <thead><tr>
@@ -169,9 +181,9 @@
 <script>
 (function(){
   "use strict";
-  const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbx-TsKC8ZWPh1aF5Kke9-O3qXeLsFs9VcuF9pFxKWuFgqAEegFfzuo-qLoCqPjKGJ1Dlw/exec";
+  const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbx-TsKC8ZWPh1aF5Kke9-O3qXeLsFs9VcuF9pFxKWuFgqAEegFfzuo-qLoCqPjKGJ1Dlw/exec"; // << แก้เป็น URL จริงของคุณ
   const POLL_INTERVAL_MS = 30000;
-  const STALE_AFTER_MS = 1000 * 60 * 60 * 6; // แก้: เดิมเขียน "1000 _60_ 60 * 6" ไม่ใช่ไวยากรณ์ JS ที่ถูกต้อง (ค่าตั้งใจ = 6 ชั่วโมง)
+  const STALE_AFTER_MS = 1000 * 60 * 60 * 6;
   const UNSPECIFIED_TYPE = "ไม่ระบุประเภท";
 
   // ============================================================
@@ -195,11 +207,6 @@
     return (asOf - start) / (finish - start);
   }
 
-  // แก้: comment เดิมปิดด้วย "_ /" ซึ่งไม่ใช่ "*/" ทำให้ comment ไม่เคยปิดจริง
-  // และกลืนโค้ดทั้งหมดที่ตามมาจนจบไฟล์ (รวมถึงฟังก์ชัน expectedPercentAt เอง) — เปลี่ยนเป็น // แทน
-  // คำนวณ % ที่ "ควรจะเป็น" ของงาน ณ วันที่กำหนด โดยใช้ plan weight + start/finish ของแต่ละขั้นตอนย่อย
-  // แม่นยำกว่าการลากเส้นตรงจาก job.start ถึง job.finish มาก เพราะสะท้อนว่าแต่ละช่วงงานหนักเบาต่างกัน
-  // ถ้างานไม่มีขั้นตอนย่อย หรือขั้นตอนไม่มีวันที่ของตัวเอง จะ fallback ไปใช้เส้นตรงแบบเดิม
   function expectedPercentAt(job, asOfDate) {
     const stepsWithDates = (job.steps || []).filter(s => s.start && s.finish && s.planWeight !== null);
     if (!stepsWithDates.length) {
@@ -225,6 +232,17 @@
     return { label: "ตามแผน", cls: "ontrack" };
   }
 
+  /** สถานะของ "ขั้นตอนย่อยแต่ละตัว" (ใช้วันที่ของขั้นตอนนั้นเอง ไม่ใช่ของทั้งงาน)
+   *  ใช้สำหรับบอกว่าขั้นตอนตรวจสอบ (หรือขั้นตอนใดๆ) เร็ว/ช้ากว่ากำหนดของตัวมันเองหรือไม่ */
+  function stepStatus(step){
+    if (!step.start || !step.finish) return { label: "ไม่มีแผน", cls: "neutral" };
+    const expected = progressFrac(new Date(step.start), new Date(step.finish), new Date()) * 100;
+    const diff = (step.percent || 0) - expected;
+    if (diff >= 5) return { label: "เร็ว", cls: "ahead" };
+    if (diff <= -5) return { label: "ช้า", cls: "behind" };
+    return { label: "ตามแผน", cls: "ontrack" };
+  }
+
   function fmtDate(d){
     if (!d) return "-";
     const yyyy = d.getFullYear(), mm = String(d.getMonth()+1).padStart(2,"0"), dd = String(d.getDate()).padStart(2,"0");
@@ -234,9 +252,6 @@
     return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   }
 
-  // แก้: comment เดิมก็ปิดผิดแบบเดียวกัน (ปิดด้วย "_ /" แทน "*/") — เปลี่ยนเป็น // แทน
-  // หาค่า % จากประวัติ ณ วันที่กำหนด แบบ "ถือค่าล่าสุดไว้" (step function)
-  // ก่อนมีประวัติเลย = 0, หลังจุดสุดท้าย = ค้างค่าล่าสุดไว้ (ไม่เดาอนาคต)
   function interpolateJobHistory(histSorted, targetDate){
     if (!histSorted.length) return 0;
     const t = targetDate.getTime();
@@ -257,6 +272,8 @@
   let lastFetchedAt = null;
   let pollTimer = null;
   let expandedKeys = new Set();
+  let focusedJobId = null; // << ใหม่: เก็บว่ากำลังโฟกัสกราฟที่งานไหนอยู่ (null = ภาพรวม)
+
   const plantFilterEl = document.getElementById("plantFilter");
   const sectionFilterEl = document.getElementById("sectionFilter");
   const typeFilterEl = document.getElementById("typeFilter");
@@ -264,6 +281,9 @@
   const statusDot = document.getElementById("statusDot");
   const lastUpdatedEl = document.getElementById("lastUpdated");
   const errorBanner = document.getElementById("errorBanner");
+  const resetChartBtn = document.getElementById("resetChartBtn");
+  const chartScopeLabelEl = document.getElementById("chartScopeLabel");
+
   function jobKey(j){ return String(j.id); }
 
   function populateFilters(){
@@ -311,17 +331,21 @@
     document.getElementById("jobCountBadge").innerText = `${jobs.length} งาน`;
   }
 
-  // แก้: เดิมมีลูปสร้าง labels/planValues ซ้ำ 2 รอบ (รอบจาก allDates ที่ถูกต้อง
-  // แล้วมีอีกลูปทับเข้าไปอีกชุดจาก minStart..maxEnd) ทำให้ labels ยาวเกิน planValues/actualValues
-  // รวมเหลือจุดคำนวณเดียวโดยใช้ allDates ชุดเดียวกันทั้งหมด — สูตร expectedPercentAt ไม่เปลี่ยน
-  function renderChart(scope, plantF, sectionF, typeF){
-    const dated = scope.filter(j => j.start && j.finish);
+  function computeChartLabel(plantF, sectionF, typeF){
     const labelParts = [];
     if (plantF !== "ALL") labelParts.push("Plant: " + plantF);
     if (sectionF !== "ALL") labelParts.push("Section: " + sectionF);
     if (typeF !== "ALL") labelParts.push("ประเภท: " + typeF);
-    document.getElementById("chartScopeLabel").innerText = labelParts.length ? labelParts.join(" • ") : "ภาพรวมทั้งหมด";
+    return labelParts.length ? labelParts.join(" • ") : "ภาพรวมทั้งหมด";
+  }
 
+  /** scope: array ของงาน (จะเป็นงานเดียวก็ได้ตอนโฟกัส) / labelText: ข้อความแสดงเหนือกราฟ */
+  function renderChart(scope, labelText){
+    chartScopeLabelEl.innerText = labelText;
+    chartScopeLabelEl.title = labelText;
+    chartScopeLabelEl.className = "scope-label" + (focusedJobId !== null ? " focused" : "");
+
+    const dated = scope.filter(j => j.start && j.finish);
     const ctx = document.getElementById("sCurveChart").getContext("2d");
     if (chartInstance){ chartInstance.destroy(); chartInstance = null; }
     if (!dated.length) return;
@@ -417,6 +441,8 @@
     }).join("");
   }
 
+  /** ตารางรายละเอียดขั้นตอนย่อย — เพิ่มคอลัมน์สถานะ (เร็ว/ตามแผน/ช้า) ของแต่ละขั้นตอนเอง
+   *  และไฮไลต์แถวที่เป็น "ขั้นตอนตรวจสอบ" (ตรวจจับจากตัวอักษรสีเหลืองในคอลัมน์ Description ของไฟล์ต้นทาง) */
   function buildStepDetailHtml(job){
     const steps = job.steps || [];
     if (!steps.length){
@@ -424,14 +450,20 @@
     }
     const hasWeights = steps.some(s => s.planWeight !== null && s.planWeight !== undefined);
     const headCols = hasWeights
-      ? `<th>#</th><th>ขั้นตอน / อุปกรณ์</th><th>Plan %</th><th>Actual %</th><th>ผลที่ได้</th>`
-      : `<th>#</th><th>ขั้นตอน / อุปกรณ์</th><th>ความคืบหน้า</th>`;
+      ? `<th>#</th><th>ขั้นตอน / อุปกรณ์</th><th>Plan %</th><th>Actual %</th><th>ผลที่ได้</th><th>ช่วงเวลา</th><th>สถานะ</th>`
+      : `<th>#</th><th>ขั้นตอน / อุปกรณ์</th><th>ความคืบหน้า</th><th>ช่วงเวลา</th><th>สถานะ</th>`;
+
     const rows = steps.map((s, idx) => {
+      const st = stepStatus(s);
+      const dateRangeText = (s.start && s.finish) ? `${fmtDate(new Date(s.start))} – ${fmtDate(new Date(s.finish))}` : "-";
+      const rowClass = s.isInspection ? ' class="step-row-inspection"' : "";
+      const descHtml = escapeHtml(s.desc) + (s.isInspection ? '<span class="inspection-badge">🔍 ตรวจสอบ</span>' : "");
+
       if (hasWeights){
         const contribution = (s.planWeight || 0) * (s.percent || 0) / 100;
-        return `<tr>
+        return `<tr${rowClass}>
           <td style="width:28px;color:var(--muted);">${idx + 1}</td>
-          <td>${escapeHtml(s.desc)}</td>
+          <td>${descHtml}</td>
           <td style="color:var(--muted);">${(s.planWeight || 0).toFixed(2)}%</td>
           <td>
             <div class="step-bar-cell">
@@ -440,21 +472,32 @@
             </div>
           </td>
           <td style="color:var(--teal);font-weight:600;">${contribution.toFixed(2)}%</td>
+          <td style="color:var(--muted);font-size:11px;">${dateRangeText}</td>
+          <td class="status-${st.cls}">${st.label}</td>
         </tr>`;
       }
-      return `<tr>
+      return `<tr${rowClass}>
         <td style="width:28px;color:var(--muted);">${idx + 1}</td>
-        <td>${escapeHtml(s.desc)}</td>
+        <td>${descHtml}</td>
         <td>
           <div class="step-bar-cell">
             <div class="step-bar-outer"><div class="step-bar-inner" style="width:${Math.max(0, Math.min(100, s.percent))}%;"></div></div>
             <span class="step-pct-text">${Math.round(s.percent)}%</span>
           </div>
         </td>
+        <td style="color:var(--muted);font-size:11px;">${dateRangeText}</td>
+        <td class="status-${st.cls}">${st.label}</td>
       </tr>`;
     }).join("");
+
+    const inspectionCount = steps.filter(s => s.isInspection).length;
+    const inspectionNote = inspectionCount
+      ? `<div style="font-size:11px;color:var(--yellow);margin-bottom:6px;">🔍 พบขั้นตอนตรวจสอบ ${inspectionCount} ขั้นตอน (ไฮไลต์สีเหลือง) — ดูคอลัมน์ "สถานะ" ว่าตรวจเร็วหรือช้ากว่ากำหนด</div>`
+      : "";
+
     return `
       <div class="detail-inner">
+        ${inspectionNote}
         <table class="step-table">
           <thead><tr>${headCols}</tr></thead>
           <tbody>${rows}</tbody>
@@ -473,8 +516,9 @@
       const st = statusOf(j);
       const key = jobKey(j);
       const isExpanded = expandedKeys.has(key);
+      const isFocused = focusedJobId === j.id;
       html += `
-        <tr class="job-row${isExpanded ? " expanded" : ""}" data-key="${escapeHtml(key)}">
+        <tr class="job-row${isExpanded ? " expanded" : ""}${isFocused ? " focused" : ""}" data-key="${escapeHtml(key)}">
           <td>${escapeHtml(j.tag)}</td>
           <td>${escapeHtml(j.workType)}</td>
           <td class="job-name-cell"><span class="expand-icon">▶</span>${escapeHtml(j.desc.slice(0,80))}</td>
@@ -489,12 +533,15 @@
       `;
     });
     tbody.innerHTML = html;
+
     tbody.querySelectorAll("tr.job-row").forEach(row => {
       row.addEventListener("click", () => {
         const key = row.getAttribute("data-key");
         const detailRow = tbody.querySelector(`tr.detail-row[data-key-detail="${CSS.escape(key)}"]`);
         const job = display.find(j => jobKey(j) === key);
         if (!detailRow || !job) return;
+
+        // สลับเปิด/ปิดรายละเอียดขั้นตอนย่อยตามเดิม
         const nowExpanded = !row.classList.contains("expanded");
         if (nowExpanded){
           expandedKeys.add(key);
@@ -507,6 +554,14 @@
           detailRow.classList.add("hidden");
           detailRow.querySelector("td").innerHTML = "";
         }
+
+        // ใหม่: ทุกครั้งที่คลิกแถวงาน ให้กราฟโฟกัสไปที่งานนั้นทันที (ไม่ว่าจะเปิดหรือปิดรายละเอียด)
+        focusedJobId = job.id;
+        renderChart([job], `กำลังดู: ${job.tag} — ${job.desc.slice(0,60)}`);
+        resetChartBtn.style.display = "inline-block";
+        tbody.querySelectorAll("tr.job-row").forEach(r => r.classList.remove("focused"));
+        row.classList.add("focused");
+        document.querySelector(".chart-wrap").scrollIntoView({ behavior: "smooth", block: "center" });
       });
     });
   }
@@ -514,7 +569,22 @@
   function render(){
     const { scope, display, plantF, sectionF, typeF } = getScope();
     renderKpis(scope, display);
-    renderChart(scope, plantF, sectionF, typeF);
+
+    if (focusedJobId !== null) {
+      const focusedJob = jobs.find(j => j.id === focusedJobId);
+      if (focusedJob) {
+        renderChart([focusedJob], `กำลังดู: ${focusedJob.tag} — ${focusedJob.desc.slice(0,60)}`);
+        resetChartBtn.style.display = "inline-block";
+      } else {
+        focusedJobId = null;
+        renderChart(scope, computeChartLabel(plantF, sectionF, typeF));
+        resetChartBtn.style.display = "none";
+      }
+    } else {
+      renderChart(scope, computeChartLabel(plantF, sectionF, typeF));
+      resetChartBtn.style.display = "none";
+    }
+
     renderDelayTable(scope);
     renderJobTable(display);
   }
@@ -587,6 +657,11 @@
   });
   [sectionFilterEl, typeFilterEl, statusFilterEl].forEach(el => el.addEventListener("change", render));
   document.getElementById("refreshBtn").addEventListener("click", () => fetchAndRender(false));
+
+  resetChartBtn.addEventListener("click", () => {
+    focusedJobId = null;
+    render();
+  });
 
   let resizeTimer;
   window.addEventListener("resize", () => {
