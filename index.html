@@ -50,12 +50,18 @@
   .kpi-card.behind .value{color:var(--red);}
   .chart-wrap{
     background:var(--panel); border:1px solid var(--border); border-radius:10px;
-    padding:14px; margin-bottom:20px; position:relative; height:360px;
+    padding:14px; margin-bottom:20px; position:relative; height:auto;
   }
+  .chart-canvas-box{ position:relative; height:360px; }
   .chart-head{display:flex; justify-content:space-between; align-items:center; margin-bottom:6px; flex-wrap:wrap; gap:8px;}
   .chart-head-right{display:flex; align-items:center; gap:10px;}
   .chart-head span.scope-label{font-size:12px; color:var(--muted); max-width:460px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
   .chart-head span.scope-label.focused{color:var(--teal); font-weight:600;}
+  .chart-legend-note{
+    display:none; align-items:center; gap:6px; font-size:11.5px; color:var(--red);
+    margin-top:8px; padding-top:8px; border-top:1px dashed var(--border);
+  }
+  .chart-legend-note .swatch{ display:inline-block; width:18px; height:3px; background:var(--red); border-radius:2px; }
   .table-wrap{
     background:var(--panel); border:1px solid var(--border); border-radius:10px;
     overflow:auto; max-height:460px;
@@ -151,7 +157,11 @@
         <button class="secondary" id="resetChartBtn" style="display:none;">⟲ กลับไปภาพรวม</button>
       </div>
     </div>
-    <canvas id="sCurveChart"></canvas>
+    <div class="chart-canvas-box"><canvas id="sCurveChart"></canvas></div>
+    <div class="chart-legend-note" id="inspectionNote">
+      <span class="swatch"></span>
+      <span>ช่วงเส้นสีแดง = มีขั้นตอนตรวจสอบ (ตรวจจับจากตัวอักษรสีเหลืองในไฟล์ต้นทาง) อยู่ในช่วงวันที่นั้น</span>
+    </div>
   </div>
   <h3>⚠ งานที่ล่าช้ากว่าแผน</h3>
   <div class="table-wrap">
@@ -232,8 +242,6 @@
     return { label: "ตามแผน", cls: "ontrack" };
   }
 
-  /** สถานะของ "ขั้นตอนย่อยแต่ละตัว" (ใช้วันที่ของขั้นตอนนั้นเอง ไม่ใช่ของทั้งงาน)
-   *  ใช้สำหรับบอกว่าขั้นตอนตรวจสอบ (หรือขั้นตอนใดๆ) เร็ว/ช้ากว่ากำหนดของตัวมันเองหรือไม่ */
   function stepStatus(step){
     if (!step.start || !step.finish) return { label: "ไม่มีแผน", cls: "neutral" };
     const expected = progressFrac(new Date(step.start), new Date(step.finish), new Date()) * 100;
@@ -264,6 +272,19 @@
     return 0;
   }
 
+  // ---- ใหม่: หาช่วงวันที่ของขั้นตอนตรวจสอบ (isInspection) สำหรับใช้ไฮไลต์กราฟสีแดง ----
+  function getInspectionRanges(job){
+    if (!job) return [];
+    return (job.steps || [])
+      .filter(s => s.isInspection && s.start && s.finish)
+      .map(s => ({ start: s.start, finish: s.finish }));
+  }
+  function dateInRanges(dateObj, ranges){
+    if (!ranges.length) return false;
+    const t = dateObj.getTime();
+    return ranges.some(r => t >= r.start && t <= r.finish);
+  }
+
   // ============================================================
   // ---------------------------- State -----------------------------
   // ============================================================
@@ -272,7 +293,7 @@
   let lastFetchedAt = null;
   let pollTimer = null;
   let expandedKeys = new Set();
-  let focusedJobId = null; // << ใหม่: เก็บว่ากำลังโฟกัสกราฟที่งานไหนอยู่ (null = ภาพรวม)
+  let focusedJobId = null;
 
   const plantFilterEl = document.getElementById("plantFilter");
   const sectionFilterEl = document.getElementById("sectionFilter");
@@ -283,6 +304,7 @@
   const errorBanner = document.getElementById("errorBanner");
   const resetChartBtn = document.getElementById("resetChartBtn");
   const chartScopeLabelEl = document.getElementById("chartScopeLabel");
+  const inspectionNoteEl = document.getElementById("inspectionNote");
 
   function jobKey(j){ return String(j.id); }
 
@@ -339,7 +361,9 @@
     return labelParts.length ? labelParts.join(" • ") : "ภาพรวมทั้งหมด";
   }
 
-  /** scope: array ของงาน (จะเป็นงานเดียวก็ได้ตอนโฟกัส) / labelText: ข้อความแสดงเหนือกราฟ */
+  /** scope: array ของงาน (จะเป็นงานเดียวก็ได้ตอนโฟกัส) / labelText: ข้อความแสดงเหนือกราฟ
+   *  ใหม่: ถ้า scope มีงานเดียว (เช่นตอนโฟกัสงานใดงานหนึ่ง) จะตรวจช่วงขั้นตอนตรวจสอบ (isInspection)
+   *  ของงานนั้น แล้วทาสีแดงเฉพาะช่วงเส้น (ทั้ง Plan และ Actual) ที่ตรงกับช่วงวันที่นั้น */
   function renderChart(scope, labelText){
     chartScopeLabelEl.innerText = labelText;
     chartScopeLabelEl.title = labelText;
@@ -348,6 +372,11 @@
     const dated = scope.filter(j => j.start && j.finish);
     const ctx = document.getElementById("sCurveChart").getContext("2d");
     if (chartInstance){ chartInstance.destroy(); chartInstance = null; }
+
+    // ช่วงตรวจสอบ — ใช้ได้เฉพาะตอนดูงานเดียว (scope.length === 1) เพราะอ้างอิงขั้นตอนย่อยของงานนั้นโดยตรง
+    const inspectionRanges = scope.length === 1 ? getInspectionRanges(scope[0]) : [];
+    inspectionNoteEl.style.display = inspectionRanges.length ? "flex" : "none";
+
     if (!dated.length) return;
 
     const today = new Date();
@@ -380,6 +409,22 @@
       return Math.round(weightedAvg(vals) * 10) / 10;
     });
 
+    // ---- ใหม่: ฟังก์ชันเช็คว่า "ช่วงเส้น" (segment) ระหว่างจุด p0-p1 ตกอยู่ในช่วงตรวจสอบไหม ----
+    // ถ้าปลายข้างใดข้างหนึ่งของเส้นช่วงนั้นอยู่ในช่วงตรวจสอบ ให้ทาสีแดงทั้งช่วง
+    function segmentColorRed(segCtx){
+      if (!inspectionRanges.length) return undefined; // undefined = ใช้สีเริ่มต้นของเส้น
+      const d0 = allDates[segCtx.p0DataIndex];
+      const d1 = allDates[segCtx.p1DataIndex];
+      if (!d0 || !d1) return undefined;
+      return (dateInRanges(d0, inspectionRanges) || dateInRanges(d1, inspectionRanges)) ? "#ef4444" : undefined;
+    }
+    function pointColorRed(dataIndex, defaultColor){
+      if (!inspectionRanges.length) return defaultColor;
+      const d = allDates[dataIndex];
+      if (!d) return defaultColor;
+      return dateInRanges(d, inspectionRanges) ? "#ef4444" : defaultColor;
+    }
+
     chartInstance = new Chart(ctx, {
       type: "line",
       data: {
@@ -394,6 +439,7 @@
             fill: true,
             tension: 0.15,
             pointRadius: 0,
+            segment: { borderColor: segmentColorRed },
           },
           {
             label: "จริง (Actual)",
@@ -403,7 +449,9 @@
             fill: true,
             tension: 0.1,
             pointRadius: 2,
+            pointBackgroundColor: (pCtx) => pointColorRed(pCtx.dataIndex, "#f59e0b"),
             spanGaps: true,
+            segment: { borderColor: segmentColorRed },
           }
         ]
       },
@@ -441,8 +489,6 @@
     }).join("");
   }
 
-  /** ตารางรายละเอียดขั้นตอนย่อย — เพิ่มคอลัมน์สถานะ (เร็ว/ตามแผน/ช้า) ของแต่ละขั้นตอนเอง
-   *  และไฮไลต์แถวที่เป็น "ขั้นตอนตรวจสอบ" (ตรวจจับจากตัวอักษรสีเหลืองในคอลัมน์ Description ของไฟล์ต้นทาง) */
   function buildStepDetailHtml(job){
     const steps = job.steps || [];
     if (!steps.length){
@@ -492,7 +538,7 @@
 
     const inspectionCount = steps.filter(s => s.isInspection).length;
     const inspectionNote = inspectionCount
-      ? `<div style="font-size:11px;color:var(--yellow);margin-bottom:6px;">🔍 พบขั้นตอนตรวจสอบ ${inspectionCount} ขั้นตอน (ไฮไลต์สีเหลือง) — ดูคอลัมน์ "สถานะ" ว่าตรวจเร็วหรือช้ากว่ากำหนด</div>`
+      ? `<div style="font-size:11px;color:var(--yellow);margin-bottom:6px;">🔍 พบขั้นตอนตรวจสอบ ${inspectionCount} ขั้นตอน (ไฮไลต์สีเหลือง) — ดูคอลัมน์ "สถานะ" ว่าตรวจเร็วหรือช้ากว่ากำหนด และดูกราฟด้านบนช่วงเส้นสีแดง</div>`
       : "";
 
     return `
@@ -541,7 +587,6 @@
         const job = display.find(j => jobKey(j) === key);
         if (!detailRow || !job) return;
 
-        // สลับเปิด/ปิดรายละเอียดขั้นตอนย่อยตามเดิม
         const nowExpanded = !row.classList.contains("expanded");
         if (nowExpanded){
           expandedKeys.add(key);
@@ -555,7 +600,6 @@
           detailRow.querySelector("td").innerHTML = "";
         }
 
-        // ใหม่: ทุกครั้งที่คลิกแถวงาน ให้กราฟโฟกัสไปที่งานนั้นทันที (ไม่ว่าจะเปิดหรือปิดรายละเอียด)
         focusedJobId = job.id;
         renderChart([job], `กำลังดู: ${job.tag} — ${job.desc.slice(0,60)}`);
         resetChartBtn.style.display = "inline-block";
