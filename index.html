@@ -450,10 +450,7 @@
         ? sorted.map((item, idx) => {
             const st = item.isJobLevel ? statusOf(item.job) : stepStatus(item);
             return `<div class="category-list-item" data-cat="${key}" data-idx="${idx}">
-              <div class="cli-main">
-                <span class="cli-tag">${escapeHtml(item.job.tag)}</span>
-                <span class="cli-desc">${escapeHtml((item.desc || "").slice(0,55))}</span>
-              </div>
+              <span class="cli-tag">${escapeHtml(item.job.tag)}</span>
               <div class="cli-meta">
                 <span class="cli-pct">${Math.round(item.percent)}%</span>
                 <span class="status-${st.cls}" style="font-size:10px;">${st.label}</span>
