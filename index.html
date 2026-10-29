@@ -48,7 +48,6 @@
   .kpi-card.ahead .value{color:var(--green);}
   .kpi-card.ontrack .value{color:var(--teal);}
   .kpi-card.behind .value{color:var(--red);}
-
   .category-row{display:flex; gap:12px; flex-wrap:wrap; margin-bottom:18px;}
   .category-card{
     background:var(--panel); border:1px solid var(--border); border-radius:10px;
@@ -72,12 +71,10 @@
   .category-list-item:hover{ color: var(--teal); background:#123038; }
   .cli-tag{font-weight:700; color:var(--teal); font-size:11.5px;}
   .category-empty{color:var(--muted); font-size:11px; padding:8px 2px;}
-
   .chart-wrap{
     background:var(--panel); border:1px solid var(--border); border-radius:10px;
     padding:14px; margin-bottom:20px; position:relative; height:auto;
   }
-    /* ---- ใหม่: Layout คู่กัน ระหว่างการ์ดสถานะซ่อม กับกราฟ S-curve ---- */
   .chart-section-row{
     display:flex; gap:16px; margin-bottom:20px; align-items:stretch; flex-wrap:wrap;
   }
@@ -146,8 +143,6 @@
   }
   .cat-badge.cleaning{ background:rgba(56,189,248,0.18); color:var(--blue); border-color:rgba(56,189,248,0.4); }
   .cat-badge.inspection{ background:rgba(250,204,21,0.18); color:var(--yellow); border-color:rgba(250,204,21,0.4); }
-
-  /* ---- ใหม่: badge สถานะซ่อม ---- */
   .repair-badge{
     display:inline-block; font-size:10.5px; font-weight:700; padding:2px 8px; border-radius:999px;
     border:1px solid; cursor:help; white-space:nowrap;
@@ -157,7 +152,6 @@
   .repair-badge.done{ background:rgba(34,197,94,0.18); color:var(--green); border-color:rgba(34,197,94,0.45); }
   .repair-badge.pending{ background:rgba(143,176,182,0.14); color:var(--muted); border-color:rgba(143,176,182,0.35); }
   .repair-report-count{ font-size:10px; color:var(--red); margin-top:2px; }
-
   .step-bar-cell{ display:flex; align-items:center; gap:8px; min-width:150px; }
   .step-bar-outer{ flex:1; height:6px; background:#0a1b21; border-radius:999px; overflow:hidden; min-width:70px; }
   .step-bar-inner{ height:100%; background:linear-gradient(90deg,var(--teal-dark),var(--teal)); }
@@ -216,11 +210,9 @@
     </div>
   </div>
   <div class="kpi-row" id="kpiRow"></div>
-
   <h3>สรุปตามหมวดงาน (แยกจากสีพื้นหลังคอลัมน์ Description) <span style="font-weight:400;color:var(--muted);font-size:11.5px;">— นับไม่ซ้ำ TAG</span></h3>
   <div class="category-row" id="categoryRow"></div>
-
-    <div class="chart-section-row">
+  <div class="chart-section-row">
     <div class="repair-summary-col">
       <div class="repair-summary-title">สถานะงานซ่อม (เฉพาะรายการตรวจสอบ) <span style="font-weight:400;color:var(--muted);font-size:10.5px;">— ตามขอบเขตที่เลือก</span></div>
       <div class="repair-summary-card report">
@@ -289,7 +281,7 @@
   "use strict";
   const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbx-TsKC8ZWPh1aF5Kke9-O3qXeLsFs9VcuF9pFxKWuFgqAEegFfzuo-qLoCqPjKGJ1Dlw/exec"; // << แก้เป็น URL จริงของคุณ
   const POLL_INTERVAL_MS = 30000;
-  const STALE_AFTER_MS = 1000 * 60 * 60 * 6;
+  const STALE_AFTER_MS = 1000 * 60 * 60 * 6; // แก้: เดิมเขียน "1000 _60_ 60 * 6" ไม่ใช่ไวยากรณ์ JS ที่ถูกต้อง
   const UNSPECIFIED_TYPE = "ไม่ระบุประเภท";
 
   const CATEGORY_META = {
@@ -298,7 +290,6 @@
     disassembly: { label: "งานถอด/ประกอบ (Disassembly)", color: "#e6f1f3" },
   };
 
-  // สถานะซ่อม — จำแนกจากสีพื้นหลังช่อง %Actual เฉพาะแถวหมวด inspection
   const REPAIR_META = {
     report:     { label: "แจ้งซ่อม",              cls: "report" },
     inprogress: { label: "ระหว่างซ่อม",            cls: "inprogress" },
@@ -326,7 +317,6 @@
     if (asOf >= finish) return 1;
     return (asOf - start) / (finish - start);
   }
-
   function expectedPercentAt(job, asOfDate) {
     const stepsWithDates = (job.steps || []).filter(s => s.start && s.finish && s.planWeight !== null);
     if (!stepsWithDates.length) {
@@ -342,7 +332,6 @@
     }, 0);
     return (weightedSum / totalWeight) * 100;
   }
-
   function statusOf(job){
     if (!job.start || !job.finish) return { label: "ไม่มีแผน", cls: "neutral" };
     const expected = expectedPercentAt(job, new Date());
@@ -351,7 +340,6 @@
     if (diff <= -5) return { label: "ล่าช้า", cls: "behind" };
     return { label: "ตามแผน", cls: "ontrack" };
   }
-
   function stepStatus(step){
     if (!step.start || !step.finish) return { label: "ไม่มีแผน", cls: "neutral" };
     const expected = progressFrac(new Date(step.start), new Date(step.finish), new Date()) * 100;
@@ -360,7 +348,6 @@
     if (diff <= -5) return { label: "ช้า", cls: "behind" };
     return { label: "ตามแผน", cls: "ontrack" };
   }
-
   function fmtDate(d){
     if (!d) return "-";
     const yyyy = d.getFullYear(), mm = String(d.getMonth()+1).padStart(2,"0"), dd = String(d.getDate()).padStart(2,"0");
@@ -369,7 +356,6 @@
   function escapeHtml(s){
     return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   }
-
   function interpolateJobHistory(histSorted, targetDate){
     if (!histSorted.length) return 0;
     const t = targetDate.getTime();
@@ -381,7 +367,6 @@
     }
     return 0;
   }
-
   function getInspectionRanges(job){
     if (!job) return [];
     return (job.steps || [])
@@ -394,8 +379,8 @@
     return ranges.some(r => t >= r.start && t <= r.finish);
   }
 
-  /** สร้าง badge สถานะซ่อม + tooltip ประวัติ (ใช้ได้ทั้งกับ step object และ job object ที่มี field ร่วมกัน:
-   *  category, repairStatus, repairHistory, repairReportCount) */
+  // สร้าง badge สถานะซ่อม + tooltip ประวัติ (ใช้ได้ทั้งกับ step object และ job object ที่มี field ร่วมกัน:
+  // category, repairStatus, repairHistory, repairReportCount)
   function buildRepairBadgeHtml(item){
     if (!item || item.category !== "inspection") return '<span style="color:var(--muted);">-</span>';
     const statusKey = item.repairStatus || "pending";
@@ -413,9 +398,9 @@
     return `<span class="repair-badge ${meta.cls}" title="${escapeHtml(histText)}">${meta.label}</span>${countHtml}`;
   }
 
-  /** จัดกลุ่มงานทั้งหมดใน scope ตามหมวดสี (cleaning / inspection / disassembly)
-   *  รวมโดยใช้ข้อความ TAG เป็นตัวตัดสินความซ้ำ (ไม่ใช่ job.id) เพื่อไม่ให้ TAG เดียวกันโผล่ซ้ำ
-   *  % ที่ใช้ตัดสินว่าเสร็จหรือยัง = ค่าเฉลี่ยถ่วงน้ำหนัก (ตาม plan weight) ของทุกขั้นตอนในหมวดนั้นที่มี TAG นี้ */
+  // จัดกลุ่มงานทั้งหมดใน scope ตามหมวดสี (cleaning / inspection / disassembly)
+  // รวมโดยใช้ข้อความ TAG เป็นตัวตัดสินความซ้ำ (ไม่ใช่ job.id) เพื่อไม่ให้ TAG เดียวกันโผล่ซ้ำ
+  // % ที่ใช้ตัดสินว่าเสร็จหรือยัง = ค่าเฉลี่ยถ่วงน้ำหนัก (ตาม plan weight) ของทุกขั้นตอนในหมวดนั้นที่มี TAG นี้
   function flattenCategoryItems(scope){
     const byCategory = { cleaning: {}, inspection: {}, disassembly: {} };
 
@@ -428,11 +413,37 @@
       bucket.weightedSum += w * percent;
       bucket.weightTotal += w;
     }
-  /** รวบรวมสถานะซ่อมของทุกรายการ "หมวด inspection" ใน scope (นับไม่ซ้ำ TAG+ขั้นตอน)
-   *  คืนค่าเป็น {report, inprogress, done, pending} จำนวนนับของแต่ละสถานะ */
+
+    scope.forEach(job => {
+      const tagDisplay = job.tag || "(ไม่มี TAG)";
+      const tagKey = tagDisplay.trim().toLowerCase();
+      if (job.steps && job.steps.length) {
+        job.steps.forEach(s => {
+          const cat = s.category || "disassembly";
+          addToCategory(cat, tagKey, tagDisplay, job, s.percent || 0, s.planWeight);
+        });
+      } else {
+        const cat = job.category || "disassembly";
+        addToCategory(cat, tagKey, tagDisplay, job, job.percent || 0, 1);
+      }
+    });
+
+    const result = {};
+    Object.keys(byCategory).forEach(cat => {
+      result[cat] = Object.values(byCategory[cat]).map(b => ({
+        job: b.job,
+        tag: b.tag,
+        percent: b.weightTotal > 0 ? (b.weightedSum / b.weightTotal) : 0,
+      }));
+    });
+    return result;
+  }
+
+  // รวบรวมสถานะซ่อมของทุกรายการ "หมวด inspection" ใน scope (นับไม่ซ้ำ TAG+ขั้นตอน)
+  // คืนค่าเป็น {report, inprogress, done, pending} จำนวนนับของแต่ละสถานะ
   function countRepairStatuses(scope){
     const counts = { report: 0, inprogress: 0, done: 0, pending: 0 };
-    const seen = new Set(); // กัน TAG+ขั้นตอนเดียวกันถูกนับซ้ำ ถ้ามีหลาย job entry ชี้มาที่เดียวกัน
+    const seen = new Set();
 
     scope.forEach(job => {
       if (job.steps && job.steps.length) {
@@ -464,31 +475,6 @@
     document.getElementById("repairCountInprogress").innerText = counts.inprogress;
     document.getElementById("repairCountDone").innerText = counts.done;
     document.getElementById("repairCountPending").innerText = counts.pending;
-  }
-    scope.forEach(job => {
-      const tagDisplay = job.tag || "(ไม่มี TAG)";
-      const tagKey = tagDisplay.trim().toLowerCase();
-
-      if (job.steps && job.steps.length) {
-        job.steps.forEach(s => {
-          const cat = s.category || "disassembly";
-          addToCategory(cat, tagKey, tagDisplay, job, s.percent || 0, s.planWeight);
-        });
-      } else {
-        const cat = job.category || "disassembly";
-        addToCategory(cat, tagKey, tagDisplay, job, job.percent || 0, 1);
-      }
-    });
-
-    const result = {};
-    Object.keys(byCategory).forEach(cat => {
-      result[cat] = Object.values(byCategory[cat]).map(b => ({
-        job: b.job,
-        tag: b.tag,
-        percent: b.weightTotal > 0 ? (b.weightedSum / b.weightTotal) : 0,
-      }));
-    });
-    return result;
   }
 
   // ============================================================
@@ -577,16 +563,13 @@
       const completed = catItems.filter(i => Math.round(i.percent) >= 100).length;
       const total = catItems.length;
       const isExpanded = categoryExpanded.has(key);
-
       const sorted = [...catItems].sort((a, b) => b.percent - a.percent);
       categoryItemsCache[key] = sorted;
-
       const listHtml = sorted.length
         ? sorted.map((item, idx) => `<div class="category-list-item" data-cat="${key}" data-idx="${idx}">
             <span class="cli-tag">${escapeHtml(item.tag)}</span>
           </div>`).join("")
         : `<div class="category-empty">ไม่มีรายการในหมวดนี้ในขอบเขตที่เลือก</div>`;
-
       return `
         <div class="category-card" data-cat="${key}">
           <div class="category-card-head">
@@ -600,7 +583,6 @@
         </div>
       `;
     }).join("");
-
     categoryRowEl.innerHTML = html;
 
     categoryRowEl.querySelectorAll(".cat-toggle-btn").forEach(btn => {
@@ -894,7 +876,7 @@
     const { scope, display, plantF, sectionF, typeF } = getScope();
     renderKpis(scope, display);
     renderCategoryCards(scope);
-    renderRepairSummary(scope); // << เพิ่มบรรทัดนี้
+    renderRepairSummary(scope);
 
     if (focusedJobId !== null) {
       const focusedJob = jobs.find(j => j.id === focusedJobId);
