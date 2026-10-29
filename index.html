@@ -79,15 +79,16 @@
     display:flex; gap:16px; margin-bottom:20px; align-items:stretch; flex-wrap:wrap;
   }
   .repair-summary-col{
-    flex:0 0 280px; display:flex; flex-direction:column; gap:10px;
+    flex:0 0 300px; display:flex; flex-direction:column; gap:10px;
   }
   .chart-section-row .chart-wrap{
     flex:1 1 480px; margin-bottom:0; min-width:320px;
   }
   .repair-summary-card{
     background:var(--panel); border:1px solid var(--border); border-radius:10px;
-    padding:12px 14px; display:flex; align-items:center; gap:12px;
+    padding:12px 14px; display:flex; flex-direction:column; gap:0;
   }
+  .repair-summary-card .rs-top{ display:flex; align-items:center; gap:12px; }
   .repair-summary-card .dot{
     width:11px; height:11px; border-radius:50%; flex-shrink:0;
   }
@@ -101,6 +102,7 @@
   .repair-summary-card.report .rs-value{ color:var(--red); }
   .repair-summary-card.inprogress .rs-value{ color:var(--yellow); }
   .repair-summary-card.done .rs-value{ color:var(--green); }
+  .repair-summary-card .cat-toggle-btn{ margin-top:8px; }
   .repair-summary-title{ font-size:12.5px; font-weight:600; color:var(--text); margin-bottom:2px; }
   .chart-canvas-box{ position:relative; height:360px; }
   .chart-head{display:flex; justify-content:space-between; align-items:center; margin-bottom:6px; flex-wrap:wrap; gap:8px;}
@@ -182,7 +184,7 @@
   <div class="toolbar">
     <span style="font-size:12px;color:var(--muted);">
       ข้อมูลดึงจาก Google Apps Script (ซิงก์จากไฟล์ Excel ใน Google Drive ทุก 15 นาที) และรีเฟรชหน้านี้ทุก 30 วินาที —
-      คลิกที่แถวงานหรือ TAG ในการ์ดหมวดงานด้านล่าง เพื่อดูรายละเอียดและโฟกัสกราฟ
+      คลิกที่แถวงานหรือ TAG ในการ์ดต่างๆ เพื่อดูรายละเอียดและโฟกัสกราฟ
     </span>
     <button class="secondary" id="refreshBtn">รีเฟรชตอนนี้</button>
   </div>
@@ -215,25 +217,41 @@
   <div class="chart-section-row">
     <div class="repair-summary-col">
       <div class="repair-summary-title">สถานะงานซ่อม (เฉพาะรายการตรวจสอบ) <span style="font-weight:400;color:var(--muted);font-size:10.5px;">— ตามขอบเขตที่เลือก</span></div>
-      <div class="repair-summary-card report">
-        <span class="dot"></span>
-        <div class="rs-text"><div class="rs-label">🔴 แจ้งซ่อม</div></div>
-        <div class="rs-value" id="repairCountReport">0</div>
+      <div class="repair-summary-card report" data-status="report">
+        <div class="rs-top">
+          <span class="dot"></span>
+          <div class="rs-text"><div class="rs-label">🔴 แจ้งซ่อม</div></div>
+          <div class="rs-value" id="repairCountReport">0</div>
+        </div>
+        <button class="secondary cat-toggle-btn" data-status="report" data-total="0">ดูรายการ TAG ▼ (0)</button>
+        <div class="category-list hidden" id="repairList-report"></div>
       </div>
-      <div class="repair-summary-card inprogress">
-        <span class="dot"></span>
-        <div class="rs-text"><div class="rs-label">🟡 ระหว่างซ่อม</div></div>
-        <div class="rs-value" id="repairCountInprogress">0</div>
+      <div class="repair-summary-card inprogress" data-status="inprogress">
+        <div class="rs-top">
+          <span class="dot"></span>
+          <div class="rs-text"><div class="rs-label">🟡 ระหว่างซ่อม</div></div>
+          <div class="rs-value" id="repairCountInprogress">0</div>
+        </div>
+        <button class="secondary cat-toggle-btn" data-status="inprogress" data-total="0">ดูรายการ TAG ▼ (0)</button>
+        <div class="category-list hidden" id="repairList-inprogress"></div>
       </div>
-      <div class="repair-summary-card done">
-        <span class="dot"></span>
-        <div class="rs-text"><div class="rs-label">🟢 ซ่อมเสร็จ / ผ่านแล้ว</div></div>
-        <div class="rs-value" id="repairCountDone">0</div>
+      <div class="repair-summary-card done" data-status="done">
+        <div class="rs-top">
+          <span class="dot"></span>
+          <div class="rs-text"><div class="rs-label">🟢 ซ่อมเสร็จ / ผ่านแล้ว</div></div>
+          <div class="rs-value" id="repairCountDone">0</div>
+        </div>
+        <button class="secondary cat-toggle-btn" data-status="done" data-total="0">ดูรายการ TAG ▼ (0)</button>
+        <div class="category-list hidden" id="repairList-done"></div>
       </div>
-      <div class="repair-summary-card pending">
-        <span class="dot"></span>
-        <div class="rs-text"><div class="rs-label">⚪ รอสรุปผล</div></div>
-        <div class="rs-value" id="repairCountPending">0</div>
+      <div class="repair-summary-card pending" data-status="pending">
+        <div class="rs-top">
+          <span class="dot"></span>
+          <div class="rs-text"><div class="rs-label">⚪ รอสรุปผล</div></div>
+          <div class="rs-value" id="repairCountPending">0</div>
+        </div>
+        <button class="secondary cat-toggle-btn" data-status="pending" data-total="0">ดูรายการ TAG ▼ (0)</button>
+        <div class="category-list hidden" id="repairList-pending"></div>
       </div>
     </div>
     <div class="chart-wrap">
@@ -262,7 +280,7 @@
     </table>
     <div class="empty-note" id="delayEmptyNote" style="display:none;">ไม่มีงานล่าช้าในขอบเขตนี้</div>
   </div>
-  <h3>รายการงานทั้งหมด <span style="font-weight:400;color:var(--muted);font-size:11.5px;">(คลิกที่แถวเพื่อดูรายละเอียดและโฟกัสกราฟ — สถานะซ่อม: วางเมาส์ที่ badge เพื่อดูประวัติ)</span></h3>
+  <h3>รายการงานทั้งหมด <span style="font-weight:400;color:var(--muted);font-size:11.5px;">(คลิกที่แถวเพื่อเปิด/ปิดรายละเอียด)</span></h3>
   <div class="table-wrap">
     <table id="jobTable">
       <thead><tr>
@@ -281,7 +299,7 @@
   "use strict";
   const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbx-TsKC8ZWPh1aF5Kke9-O3qXeLsFs9VcuF9pFxKWuFgqAEegFfzuo-qLoCqPjKGJ1Dlw/exec"; // << แก้เป็น URL จริงของคุณ
   const POLL_INTERVAL_MS = 30000;
-  const STALE_AFTER_MS = 1000 * 60 * 60 * 6; // แก้: เดิมเขียน "1000 _60_ 60 * 6" ไม่ใช่ไวยากรณ์ JS ที่ถูกต้อง
+  const STALE_AFTER_MS = 1000 * 60 * 60 * 6;
   const UNSPECIFIED_TYPE = "ไม่ระบุประเภท";
 
   const CATEGORY_META = {
@@ -296,6 +314,7 @@
     done:       { label: "ซ่อมเสร็จ/ไม่ต้องซ่อม",   cls: "done" },
     pending:    { label: "รอสรุปผล",               cls: "pending" },
   };
+  const REPAIR_ORDER = ["report", "inprogress", "done", "pending"];
 
   // ============================================================
   // --------------------------- Helpers --------------------------
@@ -379,8 +398,6 @@
     return ranges.some(r => t >= r.start && t <= r.finish);
   }
 
-  // สร้าง badge สถานะซ่อม + tooltip ประวัติ (ใช้ได้ทั้งกับ step object และ job object ที่มี field ร่วมกัน:
-  // category, repairStatus, repairHistory, repairReportCount)
   function buildRepairBadgeHtml(item){
     if (!item || item.category !== "inspection") return '<span style="color:var(--muted);">-</span>';
     const statusKey = item.repairStatus || "pending";
@@ -398,9 +415,7 @@
     return `<span class="repair-badge ${meta.cls}" title="${escapeHtml(histText)}">${meta.label}</span>${countHtml}`;
   }
 
-  // จัดกลุ่มงานทั้งหมดใน scope ตามหมวดสี (cleaning / inspection / disassembly)
-  // รวมโดยใช้ข้อความ TAG เป็นตัวตัดสินความซ้ำ (ไม่ใช่ job.id) เพื่อไม่ให้ TAG เดียวกันโผล่ซ้ำ
-  // % ที่ใช้ตัดสินว่าเสร็จหรือยัง = ค่าเฉลี่ยถ่วงน้ำหนัก (ตาม plan weight) ของทุกขั้นตอนในหมวดนั้นที่มี TAG นี้
+  // จัดกลุ่มงานตามหมวดสี (cleaning/inspection/disassembly) นับไม่ซ้ำ TAG
   function flattenCategoryItems(scope){
     const byCategory = { cleaning: {}, inspection: {}, disassembly: {} };
 
@@ -439,42 +454,39 @@
     return result;
   }
 
-  // รวบรวมสถานะซ่อมของทุกรายการ "หมวด inspection" ใน scope (นับไม่ซ้ำ TAG+ขั้นตอน)
-  // คืนค่าเป็น {report, inprogress, done, pending} จำนวนนับของแต่ละสถานะ
-  function countRepairStatuses(scope){
-    const counts = { report: 0, inprogress: 0, done: 0, pending: 0 };
-    const seen = new Set();
+  /** จัดกลุ่มรายการ "หมวด inspection" ตามสถานะซ่อม (report/inprogress/done/pending)
+   *  นับไม่ซ้ำ TAG ต่อสถานะ — ถ้างานหนึ่งมีหลายขั้นตอนตรวจสอบที่สถานะต่างกัน TAG นั้นจะโผล่ในแต่ละสถานะที่เกี่ยวข้อง
+   *  (แต่จะโผล่แค่ครั้งเดียวต่อสถานะ ถึงจะมีหลายขั้นตอนในสถานะเดียวกันซ้ำก็ตาม) */
+  function flattenRepairItems(scope){
+    const byStatus = { report: {}, inprogress: {}, done: {}, pending: {} };
+
+    function addStatus(job, status, tagKey, tagDisplay){
+      const bucket = byStatus[status] || byStatus.pending;
+      if (!bucket[tagKey]) bucket[tagKey] = { tag: tagDisplay, job };
+    }
 
     scope.forEach(job => {
+      const tagDisplay = job.tag || "(ไม่มี TAG)";
+      const tagKey = tagDisplay.trim().toLowerCase();
+      const statusesInJob = new Set();
+
       if (job.steps && job.steps.length) {
         job.steps.forEach(s => {
           if (s.category !== "inspection") return;
-          const key = (job.tag || "").trim().toLowerCase() + "||" + (s.desc || "").trim().toLowerCase();
-          if (seen.has(key)) return;
-          seen.add(key);
-          const st = s.repairStatus || "pending";
-          if (counts.hasOwnProperty(st)) counts[st]++;
-          else counts.pending++;
+          statusesInJob.add(s.repairStatus || "pending");
         });
       } else if (job.category === "inspection") {
-        const key = (job.tag || "").trim().toLowerCase() + "||" + (job.desc || "").trim().toLowerCase();
-        if (seen.has(key)) return;
-        seen.add(key);
-        const st = job.repairStatus || "pending";
-        if (counts.hasOwnProperty(st)) counts[st]++;
-        else counts.pending++;
+        statusesInJob.add(job.repairStatus || "pending");
       }
+
+      statusesInJob.forEach(st => addStatus(job, st, tagKey, tagDisplay));
     });
 
-    return counts;
-  }
-
-  function renderRepairSummary(scope){
-    const counts = countRepairStatuses(scope);
-    document.getElementById("repairCountReport").innerText = counts.report;
-    document.getElementById("repairCountInprogress").innerText = counts.inprogress;
-    document.getElementById("repairCountDone").innerText = counts.done;
-    document.getElementById("repairCountPending").innerText = counts.pending;
+    const result = {};
+    Object.keys(byStatus).forEach(st => {
+      result[st] = Object.values(byStatus[st]);
+    });
+    return result;
   }
 
   // ============================================================
@@ -488,6 +500,8 @@
   let focusedJobId = null;
   let categoryExpanded = new Set();
   let categoryItemsCache = {};
+  let repairExpanded = new Set();
+  let repairItemsCache = {};
 
   const plantFilterEl = document.getElementById("plantFilter");
   const sectionFilterEl = document.getElementById("sectionFilter");
@@ -503,11 +517,12 @@
 
   function jobKey(j){ return String(j.id); }
 
+  /** ใช้ตอนคลิก TAG ในรายการ dropdown (หมวดงาน/สถานะซ่อม) — เปิดรายละเอียดงานนั้นในตารางด้านล่าง
+   *  และโฟกัสกราฟไปที่งานนั้น "โดยไม่เลื่อนหน้าจอ" (ผู้ใช้เลื่อนไปดูเองได้ตามสะดวก) */
   function focusJob(job){
     focusedJobId = job.id;
     expandedKeys.add(jobKey(job));
     render();
-    document.querySelector(".chart-wrap").scrollIntoView({ behavior: "smooth", block: "center" });
   }
 
   function populateFilters(){
@@ -607,6 +622,64 @@
         const idx = parseInt(el.getAttribute("data-idx"), 10);
         const item = (categoryItemsCache[key] || [])[idx];
         if (item && item.job) focusJob(item.job);
+      });
+    });
+  }
+
+  /** การ์ดสถานะซ่อม 4 ใบ พร้อม dropdown กดดู TAG — ใช้ toggle แบบเบา ไม่เรียก render() ทั้งหน้า
+   *  (สลับ class "hidden" ตรงๆ เหมือนการ์ดหมวดงาน) */
+  function renderRepairSummary(scope){
+    const itemsByStatus = flattenRepairItems(scope);
+
+    REPAIR_ORDER.forEach(status => {
+      const items = itemsByStatus[status] || [];
+      repairItemsCache[status] = items;
+
+      const countElIdMap = { report: "repairCountReport", inprogress: "repairCountInprogress", done: "repairCountDone", pending: "repairCountPending" };
+      document.getElementById(countElIdMap[status]).innerText = items.length;
+
+      const listEl = document.getElementById("repairList-" + status);
+      const btn = document.querySelector(`.cat-toggle-btn[data-status="${status}"]`);
+      if (!listEl || !btn) return;
+
+      const listHtml = items.length
+        ? items.map((item, idx) => `<div class="category-list-item" data-status="${status}" data-idx="${idx}">
+            <span class="cli-tag">${escapeHtml(item.tag)}</span>
+          </div>`).join("")
+        : `<div class="category-empty">ไม่มีรายการในสถานะนี้ในขอบเขตที่เลือก</div>`;
+      listEl.innerHTML = listHtml;
+
+      const isExpanded = repairExpanded.has(status);
+      listEl.classList.toggle("hidden", !isExpanded);
+      btn.setAttribute("data-total", items.length);
+      btn.innerText = `${isExpanded ? "ซ่อนรายการ ▲" : "ดูรายการ TAG ▼"} (${items.length})`;
+
+      listEl.querySelectorAll(".category-list-item").forEach(el => {
+        el.addEventListener("click", () => {
+          const st = el.getAttribute("data-status");
+          const idx = parseInt(el.getAttribute("data-idx"), 10);
+          const item = (repairItemsCache[st] || [])[idx];
+          if (item && item.job) focusJob(item.job);
+        });
+      });
+    });
+
+    // ผูก toggle ปุ่มครั้งเดียวพอ (ใช้ event delegation ผ่าน data-status ไม่ต้องผูกซ้ำทุกรอบ render)
+    document.querySelectorAll(".repair-summary-card .cat-toggle-btn").forEach(btn => {
+      if (btn.dataset.bound === "1") return; // กันผูก event ซ้ำซ้อนทุกครั้งที่ render
+      btn.dataset.bound = "1";
+      btn.addEventListener("click", () => {
+        const status = btn.getAttribute("data-status");
+        const listEl = document.getElementById("repairList-" + status);
+        const nowHidden = listEl.classList.toggle("hidden");
+        const total = btn.getAttribute("data-total");
+        if (nowHidden) {
+          repairExpanded.delete(status);
+          btn.innerText = `ดูรายการ TAG ▼ (${total})`;
+        } else {
+          repairExpanded.add(status);
+          btn.innerText = `ซ่อนรายการ ▲ (${total})`;
+        }
       });
     });
   }
@@ -847,27 +920,23 @@
     });
     tbody.innerHTML = html;
 
+    // คลิกแถวงาน: toggle เปิด/ปิดรายละเอียดอิสระจากกัน — เปิดจะโฟกัสกราฟไปที่งานนั้น
+    // ปิดจะคืนกราฟกลับภาพรวม (ถ้ากำลังโฟกัสงานนั้นอยู่) ไม่มีการเลื่อนหน้าจออัตโนมัติอีกต่อไป
     tbody.querySelectorAll("tr.job-row").forEach(row => {
       row.addEventListener("click", () => {
         const key = row.getAttribute("data-key");
-        const detailRow = tbody.querySelector(`tr.detail-row[data-key-detail="${CSS.escape(key)}"]`);
         const job = display.find(j => jobKey(j) === key);
-        if (!detailRow || !job) return;
+        if (!job) return;
 
-        const nowExpanded = !row.classList.contains("expanded");
-        if (nowExpanded){
+        const willExpand = !expandedKeys.has(key);
+        if (willExpand) {
           expandedKeys.add(key);
-          row.classList.add("expanded");
-          detailRow.classList.remove("hidden");
-          detailRow.querySelector("td").innerHTML = buildStepDetailHtml(job);
+          focusedJobId = job.id;
         } else {
           expandedKeys.delete(key);
-          row.classList.remove("expanded");
-          detailRow.classList.add("hidden");
-          detailRow.querySelector("td").innerHTML = "";
+          if (focusedJobId === job.id) focusedJobId = null;
         }
-
-        focusJob(job);
+        render();
       });
     });
   }
