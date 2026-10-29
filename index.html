@@ -7,7 +7,7 @@
   :root{
     --bg:#0b1b23; --panel:#102a33; --panel2:#153640; --border:#20424d;
     --text:#e6f1f3; --muted:#8fb0b6; --teal:#2dd4bf; --teal-dark:#0f766e;
-    --amber:#f59e0b; --green:#22c55e; --red:#ef4444; --yellow:#facc15;
+    --amber:#f59e0b; --green:#22c55e; --red:#ef4444; --yellow:#facc15; --blue:#38bdf8;
   }
   *{box-sizing:border-box;}
   body{
@@ -48,6 +48,36 @@
   .kpi-card.ahead .value{color:var(--green);}
   .kpi-card.ontrack .value{color:var(--teal);}
   .kpi-card.behind .value{color:var(--red);}
+
+  /* ---- ใหม่: การ์ดสรุปตามหมวดงาน (สี) ---- */
+  .category-row{display:flex; gap:12px; flex-wrap:wrap; margin-bottom:18px;}
+  .category-card{
+    background:var(--panel); border:1px solid var(--border); border-radius:10px;
+    padding:14px 16px; min-width:220px; flex:1 1 220px;
+  }
+  .category-card-head{display:flex; align-items:center; gap:8px; margin-bottom:6px;}
+  .cat-swatch{width:13px; height:13px; border-radius:4px; border:1px solid var(--border); flex-shrink:0;}
+  .cat-title{font-size:12.5px; font-weight:600;}
+  .cat-value{font-size:24px; font-weight:700; color:var(--text);}
+  .cat-value-total{font-size:14px; color:var(--muted); font-weight:400;}
+  .cat-sub{font-size:10.5px; color:var(--muted); margin-bottom:10px;}
+  .cat-toggle-btn{width:100%; text-align:left; font-size:11px; padding:6px 10px;}
+  .category-list{
+    margin-top:8px; max-height:220px; overflow-y:auto; border-top:1px dashed var(--border); padding-top:8px;
+  }
+  .category-list.hidden{ display:none; }
+  .category-list-item{
+    display:flex; justify-content:space-between; align-items:center; gap:8px;
+    padding:6px 4px; border-bottom:1px solid #13303a; cursor:pointer; font-size:11px;
+  }
+  .category-list-item:hover{ background:#123038; }
+  .cli-main{display:flex; flex-direction:column; gap:1px; min-width:0;}
+  .cli-tag{font-weight:700; color:var(--teal); font-size:11px;}
+  .cli-desc{color:var(--muted); font-size:10.5px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:220px;}
+  .cli-meta{display:flex; align-items:center; gap:6px; flex-shrink:0;}
+  .cli-pct{font-weight:700; font-size:11.5px;}
+  .category-empty{color:var(--muted); font-size:11px; padding:8px 2px;}
+
   .chart-wrap{
     background:var(--panel); border:1px solid var(--border); border-radius:10px;
     padding:14px; margin-bottom:20px; position:relative; height:auto;
@@ -85,12 +115,14 @@
   table.step-table{ width:100%; border-collapse:collapse; font-size:11.8px; margin-top:4px; }
   table.step-table th{ background:transparent; color:var(--muted); position:static; font-weight:600; padding:4px 8px; border-bottom:1px solid var(--border); }
   table.step-table td{ padding:5px 8px; border-bottom:1px solid #16343c; white-space:normal; }
+  tr.step-row-cleaning td{ background:rgba(56,189,248,0.08); border-left:3px solid var(--blue); }
   tr.step-row-inspection td{ background:rgba(250,204,21,0.07); border-left:3px solid var(--yellow); }
-  .inspection-badge{
-    display:inline-block; background:rgba(250,204,21,0.18); color:var(--yellow);
-    font-size:10px; font-weight:700; padding:1px 7px; border-radius:999px; margin-left:6px;
-    border:1px solid rgba(250,204,21,0.4);
+  .cat-badge{
+    display:inline-block; font-size:10px; font-weight:700; padding:1px 7px; border-radius:999px; margin-left:6px;
+    border:1px solid; white-space:nowrap;
   }
+  .cat-badge.cleaning{ background:rgba(56,189,248,0.18); color:var(--blue); border-color:rgba(56,189,248,0.4); }
+  .cat-badge.inspection{ background:rgba(250,204,21,0.18); color:var(--yellow); border-color:rgba(250,204,21,0.4); }
   .step-bar-cell{ display:flex; align-items:center; gap:8px; min-width:150px; }
   .step-bar-outer{ flex:1; height:6px; background:#0a1b21; border-radius:999px; overflow:hidden; min-width:70px; }
   .step-bar-inner{ height:100%; background:linear-gradient(90deg,var(--teal-dark),var(--teal)); }
@@ -121,7 +153,7 @@
   <div class="toolbar">
     <span style="font-size:12px;color:var(--muted);">
       ข้อมูลดึงจาก Google Apps Script (ซิงก์จากไฟล์ Excel ใน Google Drive ทุก 15 นาที) และรีเฟรชหน้านี้ทุก 30 วินาที —
-      คลิกที่แถวงานเพื่อดูรายละเอียดขั้นตอนย่อย <strong>และกราฟจะเปลี่ยนไปโฟกัสงานนั้นโดยอัตโนมัติ</strong>
+      คลิกที่แถวงานหรือรายการในการ์ดหมวดงานด้านล่าง เพื่อดูรายละเอียดและโฟกัสกราฟ
     </span>
     <button class="secondary" id="refreshBtn">รีเฟรชตอนนี้</button>
   </div>
@@ -149,6 +181,10 @@
     </div>
   </div>
   <div class="kpi-row" id="kpiRow"></div>
+
+  <h3>สรุปตามหมวดงาน (แยกจากสีพื้นหลังคอลัมน์ Description) <span style="font-weight:400;color:var(--muted);font-size:11.5px;">— กดปุ่มในการ์ดเพื่อดูรายการ TAG</span></h3>
+  <div class="category-row" id="categoryRow"></div>
+
   <div class="chart-wrap">
     <div class="chart-head">
       <strong style="font-size:13px;">S-Curve: แผน (Plan) เทียบ จริง (Actual)</strong>
@@ -160,7 +196,7 @@
     <div class="chart-canvas-box"><canvas id="sCurveChart"></canvas></div>
     <div class="chart-legend-note" id="inspectionNote">
       <span class="swatch"></span>
-      <span>ช่วงเส้นสีแดง = มีขั้นตอนตรวจสอบ (ตรวจจับจากตัวอักษรสีเหลืองในไฟล์ต้นทาง) อยู่ในช่วงวันที่นั้น</span>
+      <span>ช่วงเส้นสีแดง = มีขั้นตอนตรวจสอบ (หมวดสีเหลือง) อยู่ในช่วงวันที่นั้น</span>
     </div>
   </div>
   <h3>⚠ งานที่ล่าช้ากว่าแผน</h3>
@@ -195,6 +231,12 @@
   const POLL_INTERVAL_MS = 30000;
   const STALE_AFTER_MS = 1000 * 60 * 60 * 6;
   const UNSPECIFIED_TYPE = "ไม่ระบุประเภท";
+
+  const CATEGORY_META = {
+    cleaning:    { label: "งานทำความสะอาด (Cleaning)", color: "#38bdf8" },
+    inspection:  { label: "งานตรวจสอบ (Inspection)",   color: "#facc15" },
+    disassembly: { label: "งานถอด/ประกอบ (Disassembly)", color: "#e6f1f3" },
+  };
 
   // ============================================================
   // --------------------------- Helpers --------------------------
@@ -272,17 +314,46 @@
     return 0;
   }
 
-  // ---- ใหม่: หาช่วงวันที่ของขั้นตอนตรวจสอบ (isInspection) สำหรับใช้ไฮไลต์กราฟสีแดง ----
   function getInspectionRanges(job){
     if (!job) return [];
     return (job.steps || [])
-      .filter(s => s.isInspection && s.start && s.finish)
+      .filter(s => s.category === "inspection" && s.start && s.finish)
       .map(s => ({ start: s.start, finish: s.finish }));
   }
   function dateInRanges(dateObj, ranges){
     if (!ranges.length) return false;
     const t = dateObj.getTime();
     return ranges.some(r => t >= r.start && t <= r.finish);
+  }
+
+  /** รวมงาน+ขั้นตอนย่อยทั้งหมดใน scope ให้เป็น "รายการระดับเดียว" สำหรับนับตามหมวดสี
+   *  ถ้างานมีขั้นตอนย่อย -> ใช้แต่ละขั้นตอนเป็น 1 รายการ (ตามหมวดของขั้นตอนนั้น)
+   *  ถ้างานไม่มีขั้นตอนย่อย -> ใช้ตัวงานเองเป็น 1 รายการ (ตามหมวดของแถวงานเอง) */
+  function flattenCategoryItems(scope){
+    const items = [];
+    scope.forEach(job => {
+      if (job.steps && job.steps.length) {
+        job.steps.forEach(s => {
+          items.push({
+            category: s.category || "disassembly",
+            percent: s.percent || 0,
+            desc: s.desc,
+            start: s.start ? new Date(s.start) : null,
+            finish: s.finish ? new Date(s.finish) : null,
+            job, isJobLevel: false,
+          });
+        });
+      } else {
+        items.push({
+          category: job.category || "disassembly",
+          percent: job.percent || 0,
+          desc: job.desc,
+          start: job.start, finish: job.finish,
+          job, isJobLevel: true,
+        });
+      }
+    });
+    return items;
   }
 
   // ============================================================
@@ -294,6 +365,7 @@
   let pollTimer = null;
   let expandedKeys = new Set();
   let focusedJobId = null;
+  let categoryExpanded = new Set(); // << ใหม่: เก็บว่า dropdown หมวดไหนเปิดอยู่
 
   const plantFilterEl = document.getElementById("plantFilter");
   const sectionFilterEl = document.getElementById("sectionFilter");
@@ -305,8 +377,17 @@
   const resetChartBtn = document.getElementById("resetChartBtn");
   const chartScopeLabelEl = document.getElementById("chartScopeLabel");
   const inspectionNoteEl = document.getElementById("inspectionNote");
+  const categoryRowEl = document.getElementById("categoryRow");
 
   function jobKey(j){ return String(j.id); }
+
+  /** ใช้ร่วมกันทั้งตอนคลิกแถวในตารางงาน และคลิกรายการใน dropdown หมวดงาน */
+  function focusJob(job){
+    focusedJobId = job.id;
+    expandedKeys.add(jobKey(job));
+    render();
+    document.querySelector(".chart-wrap").scrollIntoView({ behavior: "smooth", block: "center" });
+  }
 
   function populateFilters(){
     const plants = [...new Set(jobs.map(j => j.plant).filter(Boolean))].sort();
@@ -353,6 +434,75 @@
     document.getElementById("jobCountBadge").innerText = `${jobs.length} งาน`;
   }
 
+  /** ใหม่: การ์ดสรุปตามหมวดงาน (cleaning / inspection / disassembly)
+   *  ใช้ scope เดียวกับ KPI (กรองตาม Plant/Section/ประเภท แต่ไม่กรองตามสถานะ) */
+  function renderCategoryCards(scope){
+    const items = flattenCategoryItems(scope);
+    const html = Object.keys(CATEGORY_META).map(key => {
+      const meta = CATEGORY_META[key];
+      const catItems = items.filter(i => i.category === key);
+      const completed = catItems.filter(i => Math.round(i.percent) >= 100).length;
+      const total = catItems.length;
+      const isExpanded = categoryExpanded.has(key);
+
+      const sorted = [...catItems].sort((a, b) => b.percent - a.percent);
+      const listHtml = sorted.length
+        ? sorted.map((item, idx) => {
+            const st = item.isJobLevel ? statusOf(item.job) : stepStatus(item);
+            return `<div class="category-list-item" data-cat="${key}" data-idx="${idx}">
+              <div class="cli-main">
+                <span class="cli-tag">${escapeHtml(item.job.tag)}</span>
+                <span class="cli-desc">${escapeHtml((item.desc || "").slice(0,55))}</span>
+              </div>
+              <div class="cli-meta">
+                <span class="cli-pct">${Math.round(item.percent)}%</span>
+                <span class="status-${st.cls}" style="font-size:10px;">${st.label}</span>
+              </div>
+            </div>`;
+          }).join("")
+        : `<div class="category-empty">ไม่มีรายการในหมวดนี้ในขอบเขตที่เลือก</div>`;
+
+      // เก็บ reference รายการที่ sort ไว้สำหรับผูก click event (เก็บผ่าน closure ด้วย WeakMap-like approach ด้านล่าง)
+      categoryItemsCache[key] = sorted;
+
+      return `
+        <div class="category-card" data-cat="${key}">
+          <div class="category-card-head">
+            <span class="cat-swatch" style="background:${meta.color};"></span>
+            <span class="cat-title">${meta.label}</span>
+          </div>
+          <div class="cat-value">${completed}<span class="cat-value-total"> / ${total}</span></div>
+          <div class="cat-sub">เสร็จแล้ว 100% จากทั้งหมดในขอบเขตที่เลือก</div>
+          <button class="secondary cat-toggle-btn" data-cat="${key}">${isExpanded ? "ซ่อนรายการ ▲" : "ดูรายการ TAG ▼"} (${total})</button>
+          <div class="category-list ${isExpanded ? "" : "hidden"}" id="catList-${key}">${listHtml}</div>
+        </div>
+      `;
+    }).join("");
+
+    categoryRowEl.innerHTML = html;
+
+    // ผูก event ปุ่ม toggle
+    categoryRowEl.querySelectorAll(".cat-toggle-btn").forEach(btn => {
+      btn.addEventListener("click", () => {
+        const key = btn.getAttribute("data-cat");
+        if (categoryExpanded.has(key)) categoryExpanded.delete(key);
+        else categoryExpanded.add(key);
+        render();
+      });
+    });
+
+    // ผูก event คลิกรายการใน list -> โฟกัสงานนั้นเหมือนคลิกแถวในตารางด้านล่าง
+    categoryRowEl.querySelectorAll(".category-list-item").forEach(el => {
+      el.addEventListener("click", () => {
+        const key = el.getAttribute("data-cat");
+        const idx = parseInt(el.getAttribute("data-idx"), 10);
+        const item = (categoryItemsCache[key] || [])[idx];
+        if (item && item.job) focusJob(item.job);
+      });
+    });
+  }
+  let categoryItemsCache = {}; // key -> sorted items array (ใช้ map index กลับไปหา object ตอนคลิก)
+
   function computeChartLabel(plantF, sectionF, typeF){
     const labelParts = [];
     if (plantF !== "ALL") labelParts.push("Plant: " + plantF);
@@ -361,9 +511,6 @@
     return labelParts.length ? labelParts.join(" • ") : "ภาพรวมทั้งหมด";
   }
 
-  /** scope: array ของงาน (จะเป็นงานเดียวก็ได้ตอนโฟกัส) / labelText: ข้อความแสดงเหนือกราฟ
-   *  ใหม่: ถ้า scope มีงานเดียว (เช่นตอนโฟกัสงานใดงานหนึ่ง) จะตรวจช่วงขั้นตอนตรวจสอบ (isInspection)
-   *  ของงานนั้น แล้วทาสีแดงเฉพาะช่วงเส้น (ทั้ง Plan และ Actual) ที่ตรงกับช่วงวันที่นั้น */
   function renderChart(scope, labelText){
     chartScopeLabelEl.innerText = labelText;
     chartScopeLabelEl.title = labelText;
@@ -373,7 +520,6 @@
     const ctx = document.getElementById("sCurveChart").getContext("2d");
     if (chartInstance){ chartInstance.destroy(); chartInstance = null; }
 
-    // ช่วงตรวจสอบ — ใช้ได้เฉพาะตอนดูงานเดียว (scope.length === 1) เพราะอ้างอิงขั้นตอนย่อยของงานนั้นโดยตรง
     const inspectionRanges = scope.length === 1 ? getInspectionRanges(scope[0]) : [];
     inspectionNoteEl.style.display = inspectionRanges.length ? "flex" : "none";
 
@@ -409,10 +555,8 @@
       return Math.round(weightedAvg(vals) * 10) / 10;
     });
 
-    // ---- ใหม่: ฟังก์ชันเช็คว่า "ช่วงเส้น" (segment) ระหว่างจุด p0-p1 ตกอยู่ในช่วงตรวจสอบไหม ----
-    // ถ้าปลายข้างใดข้างหนึ่งของเส้นช่วงนั้นอยู่ในช่วงตรวจสอบ ให้ทาสีแดงทั้งช่วง
     function segmentColorRed(segCtx){
-      if (!inspectionRanges.length) return undefined; // undefined = ใช้สีเริ่มต้นของเส้น
+      if (!inspectionRanges.length) return undefined;
       const d0 = allDates[segCtx.p0DataIndex];
       const d1 = allDates[segCtx.p1DataIndex];
       if (!d0 || !d1) return undefined;
@@ -502,8 +646,13 @@
     const rows = steps.map((s, idx) => {
       const st = stepStatus(s);
       const dateRangeText = (s.start && s.finish) ? `${fmtDate(new Date(s.start))} – ${fmtDate(new Date(s.finish))}` : "-";
-      const rowClass = s.isInspection ? ' class="step-row-inspection"' : "";
-      const descHtml = escapeHtml(s.desc) + (s.isInspection ? '<span class="inspection-badge">🔍 ตรวจสอบ</span>' : "");
+      const rowClass = s.category === "cleaning" ? ' class="step-row-cleaning"'
+                      : s.category === "inspection" ? ' class="step-row-inspection"'
+                      : "";
+      const badge = s.category === "cleaning" ? '<span class="cat-badge cleaning">🔵 Clean</span>'
+                   : s.category === "inspection" ? '<span class="cat-badge inspection">🔍 ตรวจสอบ</span>'
+                   : "";
+      const descHtml = escapeHtml(s.desc) + badge;
 
       if (hasWeights){
         const contribution = (s.planWeight || 0) * (s.percent || 0) / 100;
@@ -536,14 +685,18 @@
       </tr>`;
     }).join("");
 
-    const inspectionCount = steps.filter(s => s.isInspection).length;
-    const inspectionNote = inspectionCount
-      ? `<div style="font-size:11px;color:var(--yellow);margin-bottom:6px;">🔍 พบขั้นตอนตรวจสอบ ${inspectionCount} ขั้นตอน (ไฮไลต์สีเหลือง) — ดูคอลัมน์ "สถานะ" ว่าตรวจเร็วหรือช้ากว่ากำหนด และดูกราฟด้านบนช่วงเส้นสีแดง</div>`
+    const cleanCount = steps.filter(s => s.category === "cleaning").length;
+    const inspCount = steps.filter(s => s.category === "inspection").length;
+    const noteParts = [];
+    if (cleanCount) noteParts.push(`🔵 ${cleanCount} ขั้นตอน Cleaning`);
+    if (inspCount) noteParts.push(`🔍 ${inspCount} ขั้นตอนตรวจสอบ`);
+    const catNote = noteParts.length
+      ? `<div style="font-size:11px;color:var(--muted);margin-bottom:6px;">${noteParts.join(" • ")}</div>`
       : "";
 
     return `
       <div class="detail-inner">
-        ${inspectionNote}
+        ${catNote}
         <table class="step-table">
           <thead><tr>${headCols}</tr></thead>
           <tbody>${rows}</tbody>
@@ -600,12 +753,7 @@
           detailRow.querySelector("td").innerHTML = "";
         }
 
-        focusedJobId = job.id;
-        renderChart([job], `กำลังดู: ${job.tag} — ${job.desc.slice(0,60)}`);
-        resetChartBtn.style.display = "inline-block";
-        tbody.querySelectorAll("tr.job-row").forEach(r => r.classList.remove("focused"));
-        row.classList.add("focused");
-        document.querySelector(".chart-wrap").scrollIntoView({ behavior: "smooth", block: "center" });
+        focusJob(job);
       });
     });
   }
@@ -613,6 +761,7 @@
   function render(){
     const { scope, display, plantF, sectionF, typeF } = getScope();
     renderKpis(scope, display);
+    renderCategoryCards(scope);
 
     if (focusedJobId !== null) {
       const focusedJob = jobs.find(j => j.id === focusedJobId);
@@ -662,6 +811,7 @@
         desc: j.desc || "",
         workType: j.workType || UNSPECIFIED_TYPE,
         percent: j.percent || 0,
+        category: j.category || "disassembly",
         start: j.start ? new Date(j.start) : null,
         finish: j.finish ? new Date(j.finish) : null,
         steps: Array.isArray(j.steps) ? j.steps : [],
