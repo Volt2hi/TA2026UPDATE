@@ -326,34 +326,40 @@
     return ranges.some(r => t >= r.start && t <= r.finish);
   }
 
-  /** รวมงาน+ขั้นตอนย่อยทั้งหมดใน scope ให้เป็น "รายการระดับเดียว" สำหรับนับตามหมวดสี
-   *  ถ้างานมีขั้นตอนย่อย -> ใช้แต่ละขั้นตอนเป็น 1 รายการ (ตามหมวดของขั้นตอนนั้น)
-   *  ถ้างานไม่มีขั้นตอนย่อย -> ใช้ตัวงานเองเป็น 1 รายการ (ตามหมวดของแถวงานเอง) */
+  /** จัดกลุ่มงานทั้งหมดใน scope ตามหมวดสี (cleaning / inspection / disassembly)
+   *  ถ้างานหนึ่งมีหลายขั้นตอนอยู่ในหมวดเดียวกัน -> รวมเป็น "1 รายการต่องาน" เท่านั้น (ไม่ซ้ำ TAG)
+   *  % ที่ใช้ตัดสินว่าเสร็จหรือยัง = ค่าเฉลี่ยถ่วงน้ำหนัก (ตาม plan weight) ของขั้นตอนในหมวดนั้นของงานนี้
+   *  คืนค่าเป็น object: { cleaning: [{job, percent}, ...], inspection: [...], disassembly: [...] } */
   function flattenCategoryItems(scope){
-    const items = [];
+    const byCategory = { cleaning: new Map(), inspection: new Map(), disassembly: new Map() };
+
     scope.forEach(job => {
       if (job.steps && job.steps.length) {
+        const stepsByCat = {};
         job.steps.forEach(s => {
-          items.push({
-            category: s.category || "disassembly",
-            percent: s.percent || 0,
-            desc: s.desc,
-            start: s.start ? new Date(s.start) : null,
-            finish: s.finish ? new Date(s.finish) : null,
-            job, isJobLevel: false,
-          });
+          const cat = s.category || "disassembly";
+          if (!stepsByCat[cat]) stepsByCat[cat] = [];
+          stepsByCat[cat].push(s);
+        });
+        Object.keys(stepsByCat).forEach(cat => {
+          const stepsInCat = stepsByCat[cat];
+          const totalWeight = stepsInCat.reduce((sum, s) => sum + (s.planWeight || 1), 0);
+          const pct = totalWeight > 0
+            ? stepsInCat.reduce((sum, s) => sum + (s.planWeight || 1) * (s.percent || 0), 0) / totalWeight
+            : 0;
+          byCategory[cat].set(job.id, { job, percent: pct });
         });
       } else {
-        items.push({
-          category: job.category || "disassembly",
-          percent: job.percent || 0,
-          desc: job.desc,
-          start: job.start, finish: job.finish,
-          job, isJobLevel: true,
-        });
+        const cat = job.category || "disassembly";
+        byCategory[cat].set(job.id, { job, percent: job.percent || 0 });
       }
     });
-    return items;
+
+    const result = {};
+    Object.keys(byCategory).forEach(cat => {
+      result[cat] = [...byCategory[cat].values()];
+    });
+    return result;
   }
 
   // ============================================================
@@ -436,16 +442,16 @@
 
   /** ใหม่: การ์ดสรุปตามหมวดงาน (cleaning / inspection / disassembly)
    *  ใช้ scope เดียวกับ KPI (กรองตาม Plant/Section/ประเภท แต่ไม่กรองตามสถานะ) */
-  function renderCategoryCards(scope){
-    const items = flattenCategoryItems(scope);
+   function renderCategoryCards(scope){
+    const itemsByCategory = flattenCategoryItems(scope);
     const html = Object.keys(CATEGORY_META).map(key => {
       const meta = CATEGORY_META[key];
-      const catItems = items.filter(i => i.category === key);
+      const catItems = itemsByCategory[key] || [];
       const completed = catItems.filter(i => Math.round(i.percent) >= 100).length;
       const total = catItems.length;
       const isExpanded = categoryExpanded.has(key);
 
-               const sorted = [...catItems].sort((a, b) => b.percent - a.percent);
+      const sorted = [...catItems].sort((a, b) => b.percent - a.percent);
       const listHtml = sorted.length
         ? sorted.map((item, idx) => {
             return `<div class="category-list-item" data-cat="${key}" data-idx="${idx}">
