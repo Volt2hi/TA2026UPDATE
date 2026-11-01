@@ -38,6 +38,12 @@
     background:var(--panel); color:var(--text); border:1px solid var(--border);
     padding:7px 10px; border-radius:6px; font-size:12px; min-width:170px;
   }
+  input[type=search]{
+    background:var(--panel); color:var(--text); border:1px solid var(--border);
+    padding:7px 10px; border-radius:6px; font-size:12px; min-width:190px;
+  }
+  input[type=search]::placeholder{color:var(--muted);}
+  input[type=search]:focus{outline:none; border-color:var(--teal);}
   .kpi-row{display:flex; gap:12px; flex-wrap:wrap; margin-bottom:18px;}
   .kpi-card{
     background:var(--panel); border:1px solid var(--border); border-radius:10px;
@@ -236,6 +242,10 @@
         <option value="ontrack">ตามแผน</option>
         <option value="behind">ล่าช้า</option>
       </select>
+    </div>
+    <div class="filter-group">
+      <label>ค้นหา TAG</label>
+      <input type="search" id="tagSearch" placeholder="พิมพ์ TAG เช่น R3401" autocomplete="off">
     </div>
   </div>
   </div>
@@ -560,6 +570,7 @@
   const sectionFilterEl = document.getElementById("sectionFilter");
   const typeFilterEl = document.getElementById("typeFilter");
   const statusFilterEl = document.getElementById("statusFilter");
+  const tagSearchEl = document.getElementById("tagSearch");
   const statusDot = document.getElementById("statusDot");
   const lastUpdatedEl = document.getElementById("lastUpdated");
   const errorBanner = document.getElementById("errorBanner");
@@ -609,12 +620,19 @@
     if (types.includes(prevType)) typeFilterEl.value = prevType;
   }
 
+  function normSearch(str){
+    return String(str || "").toLowerCase().replace(/\s+/g, "");
+  }
+
   function getScope(){
     const plantF = plantFilterEl.value, sectionF = sectionFilterEl.value, typeF = typeFilterEl.value, statusF = statusFilterEl.value;
     let scope = jobs;
     if (plantF !== "ALL") scope = scope.filter(j => j.plant === plantF);
     if (sectionF !== "ALL") scope = scope.filter(j => j.section === sectionF);
     if (typeF !== "ALL") scope = scope.filter(j => j.workType === typeF);
+    // << ใหม่: ค้นหา TAG (ไม่สนตัวพิมพ์เล็ก/ใหญ่ และไม่สนช่องว่าง)
+    const q = normSearch(tagSearchEl.value);
+    if (q) scope = scope.filter(j => normSearch(j.tag).includes(q));
     const display = statusF === "ALL" ? scope : scope.filter(j => statusOf(j).cls === statusF);
     return { scope, display, plantF, sectionF, typeF, statusF };
   }
@@ -865,6 +883,7 @@
     if (plantF !== "ALL") labelParts.push("Plant: " + plantF);
     if (sectionF !== "ALL") labelParts.push("Section: " + sectionF);
     if (typeF !== "ALL") labelParts.push("ประเภท: " + typeF);
+    if (tagSearchEl.value.trim()) labelParts.push("ค้นหา: " + tagSearchEl.value.trim());
     return labelParts.length ? labelParts.join(" • ") : "ภาพรวมทั้งหมด";
   }
 
@@ -1222,6 +1241,7 @@
     render();
   });
   [sectionFilterEl, typeFilterEl, statusFilterEl].forEach(el => el.addEventListener("change", render));
+  tagSearchEl.addEventListener("input", render);
   document.getElementById("refreshBtn").addEventListener("click", () => fetchAndRender(false));
 
   resetChartBtn.addEventListener("click", () => {
