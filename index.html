@@ -66,11 +66,13 @@
     display:inline-flex; align-items:center; justify-content:center; width:27px; height:27px;
     border-radius:50%; font-size:11.5px; color:var(--muted); border:2px solid transparent;
   }
-  .cal-cell.today .cal-num{color:var(--amber); font-weight:700;}
-  .cal-cell.has-work .cal-num{border-color:var(--teal); color:var(--text); font-weight:700; cursor:pointer;}
-  .cal-cell.has-work .cal-num:hover{background:#123038;}
+  .cal-cell.today .cal-num{color:var(--amber); font-weight:700; border-color:rgba(245,158,11,0.55);}
+  .cal-num[data-cal-day]{cursor:pointer;}
+  .cal-num[data-cal-day]:hover{background:#123038;}
+  .cal-cell.has-work .cal-num{border-color:var(--teal); color:var(--text); font-weight:700;}
   .cal-cell.selected .cal-num{background:var(--teal); border-color:var(--teal); color:#062a26;}
   .cal-day-list-title{font-size:11.5px; color:var(--muted); margin-top:10px;}
+  .cal-group-label{font-size:10.5px; color:var(--muted); padding:6px 8px 2px; border-bottom:1px dashed var(--border);}
   .category-row{display:flex; gap:12px; flex-wrap:wrap; margin-bottom:18px;}
   .category-card{
     background:var(--panel); border:1px solid var(--border); border-radius:10px;
@@ -530,6 +532,12 @@
     return false;
   }
 
+  /** งานที่ช่วง Start–Finish ของงานครอบคลุมวันนั้น (แต่ไม่จำเป็นต้องมีขั้นตอนย่อยตรงวันนั้น) */
+  function jobSpansDay(job, dayStart, dayEnd){
+    if (!job.start || !job.finish) return false;
+    return job.start.getTime() < dayEnd.getTime() && job.finish.getTime() > dayStart.getTime();
+  }
+
   // ============================================================
   // ---------------------------- State -----------------------------
   // ============================================================
@@ -646,8 +654,15 @@
       if (items.length) itemsByDay[fmtDate(ds)] = items;
     }
 
-    if (calSelectedDay && !itemsByDay[calSelectedDay]) calSelectedDay = null;
-    calDayItems = calSelectedDay ? itemsByDay[calSelectedDay] : [];
+    // รายการของวันที่เลือก: กลุ่มแรก = มีขั้นตอนตรงวันนั้น, กลุ่มสอง = อยู่ในช่วงงานแต่ไม่มีขั้นตอนตรงวันนั้น
+    let stepItems = [], spanItems = [];
+    if (calSelectedDay){
+      const [sy0, sm0, sd0] = calSelectedDay.split("-").map(Number);
+      const ds = new Date(sy0, sm0 - 1, sd0), de = new Date(sy0, sm0 - 1, sd0 + 1);
+      stepItems = scope.filter(j => jobScheduledOnDay(j, ds, de));
+      spanItems = scope.filter(j => !stepItems.includes(j) && jobSpansDay(j, ds, de));
+    }
+    calDayItems = stepItems.concat(spanItems);
 
     let cells = "";
     for (let i = 0; i < firstDow; i++) cells += '<div class="cal-cell"></div>';
@@ -658,18 +673,30 @@
       if (key === todayKey) cls.push("today");
       if (items) cls.push("has-work");
       if (key === calSelectedDay) cls.push("selected");
-      const attrs = items ? ` data-cal-day="${key}" title="${items.length} งาน"` : "";
+      const attrs = ` data-cal-day="${key}"` + (items ? ` title="${items.length} งานตามแผน"` : "");
       cells += `<div class="${cls.join(" ")}"><span class="cal-num"${attrs}>${d}</span></div>`;
     }
 
     let dropdown = "";
     if (calSelectedDay){
       const [sy, sm, sd] = calSelectedDay.split("-").map(Number);
+      const itemHtml = (j, idx) =>
+        `<div class="category-list-item" data-cal-job="${idx}" title="${escapeHtml(j.desc)}"><span class="cli-tag">${escapeHtml(j.tag || "(ไม่มี TAG)")}</span></div>`;
+      let listHtml = "";
+      if (!calDayItems.length){
+        listHtml = `<div class="category-empty">ไม่มีงานในวันนี้ตามขอบเขตที่เลือก</div>`;
+      } else {
+        if (stepItems.length){
+          listHtml += (spanItems.length ? `<div class="cal-group-label">มีขั้นตอนตามแผนในวันนี้ (${stepItems.length})</div>` : "") +
+            stepItems.map((j, i) => itemHtml(j, i)).join("");
+        }
+        if (spanItems.length){
+          listHtml += `<div class="cal-group-label">อยู่ในช่วงงาน แต่ไม่มีขั้นตอนตรงวันนี้ (${spanItems.length})</div>` +
+            spanItems.map((j, i) => itemHtml(j, stepItems.length + i)).join("");
+        }
+      }
       dropdown = `<div class="cal-day-list-title">${sd} ${THAI_MONTHS[sm - 1]} ${sy} — ${calDayItems.length} งาน</div>
-        <div class="category-list">` +
-        calDayItems.map((j, idx) =>
-          `<div class="category-list-item" data-cal-job="${idx}" title="${escapeHtml(j.desc)}"><span class="cli-tag">${escapeHtml(j.tag || "(ไม่มี TAG)")}</span></div>`
-        ).join("") + `</div>`;
+        <div class="category-list">${listHtml}</div>`;
     }
 
     calendarPanelEl.innerHTML = `
@@ -681,7 +708,7 @@
           <button class="secondary" data-cal-nav="1" title="เดือนถัดไป">›</button>
         </span>
       </div>
-      <div class="cal-hint">วงกลม = วันที่มีงาน (ตามขอบเขตที่เลือก) — กดเลขวันที่เพื่อดู TAG</div>
+      <div class="cal-hint">วงกลม = วันที่มีขั้นตอนงานตามแผน (ตามขอบเขตที่เลือก) — กดเลขวันที่ใดก็ได้เพื่อดู TAG</div>
       <div class="cal-grid">
         ${THAI_DOW.map(w => `<div class="cal-dow">${w}</div>`).join("")}
         ${cells}
@@ -697,8 +724,10 @@
       if (v === "today"){
         const n = new Date();
         calMonth = new Date(n.getFullYear(), n.getMonth(), 1);
+        calSelectedDay = fmtDate(new Date(n.getFullYear(), n.getMonth(), n.getDate())); // กด "วันนี้" = เปิดรายการงานวันนี้เลย
       } else {
         calMonth = new Date(calMonth.getFullYear(), calMonth.getMonth() + parseInt(v, 10), 1);
+        calSelectedDay = null;
       }
       renderCalendar(getScope().scope);
       return;
