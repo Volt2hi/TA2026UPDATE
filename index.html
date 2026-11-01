@@ -48,6 +48,22 @@
   .kpi-card.ahead .value{color:var(--green);}
   .kpi-card.ontrack .value{color:var(--teal);}
   .kpi-card.behind .value{color:var(--red);}
+  .schedule-row{display:flex; gap:12px; flex-wrap:wrap; margin-bottom:18px;}
+  .schedule-card{
+    background:var(--panel); border:1px solid var(--border); border-radius:10px;
+    padding:14px 16px; flex:1 1 320px; min-width:260px;
+  }
+  .schedule-head{display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;}
+  .schedule-title{font-size:12.5px; font-weight:600;}
+  .schedule-date{font-size:10.5px; color:var(--muted); font-weight:400; margin-left:6px;}
+  .schedule-count{font-size:22px; font-weight:700; color:var(--teal);}
+  .schedule-tags{display:flex; flex-wrap:wrap; gap:6px; max-height:150px; overflow-y:auto;}
+  .tag-chip{
+    display:inline-block; font-size:11.5px; font-weight:700; color:var(--teal);
+    background:var(--panel2); border:1px solid var(--border); border-radius:999px;
+    padding:3px 10px; cursor:pointer; white-space:nowrap;
+  }
+  .tag-chip:hover{ background:#123038; border-color:var(--teal); }
   .category-row{display:flex; gap:12px; flex-wrap:wrap; margin-bottom:18px;}
   .category-card{
     background:var(--panel); border:1px solid var(--border); border-radius:10px;
@@ -121,7 +137,7 @@
   table{width:100%; border-collapse:collapse; font-size:12.5px;}
   th,td{padding:8px 10px; text-align:left; border-bottom:1px solid var(--border); white-space:nowrap;}
   th{background:var(--panel2); color:var(--muted); position:sticky; top:0; font-weight:600;}
-  tr.job-row{cursor:pointer;}
+  tr.job-row{cursor:pointer; scroll-margin-top:40px;}
   tr.job-row:hover td{background:#123038;}
   tr.job-row.focused td{background:#0f3330;}
   tr.job-row td.job-name-cell{white-space:normal;}
@@ -212,6 +228,8 @@
     </div>
   </div>
   <div class="kpi-row" id="kpiRow"></div>
+  <h3>งานวันนี้ / พรุ่งนี้ <span style="font-weight:400;color:var(--muted);font-size:11.5px;">— ตามขอบเขตที่เลือก (คลิก TAG เพื่อไปดูรายละเอียดในตารางด้านล่าง)</span></h3>
+  <div class="schedule-row" id="scheduleRow"></div>
   <h3>สรุปตามหมวดงาน (แยกจากสีพื้นหลังคอลัมน์ Description) <span style="font-weight:400;color:var(--muted);font-size:11.5px;">— นับไม่ซ้ำ TAG</span></h3>
   <div class="category-row" id="categoryRow"></div>
   <div class="chart-section-row">
@@ -489,6 +507,19 @@
     return result;
   }
 
+  /** งานที่มีแผนทำในช่วงวันที่ [dayStart, dayEnd) — ดูจากขั้นตอนย่อยที่มีวันที่ก่อน
+   *  ถ้างานไม่มีขั้นตอนย่อยที่มีวันที่ ใช้ช่วง Start–Finish ของงานแทน */
+  function jobScheduledOnDay(job, dayStart, dayEnd){
+    const t0 = dayStart.getTime(), t1 = dayEnd.getTime();
+    function overlaps(s, f){
+      return (s < t1 && f > t0) || (s >= t0 && s < t1);
+    }
+    const datedSteps = (job.steps || []).filter(s => s.start && s.finish);
+    if (datedSteps.length) return datedSteps.some(s => overlaps(s.start, s.finish));
+    if (job.start && job.finish) return overlaps(job.start.getTime(), job.finish.getTime());
+    return false;
+  }
+
   // ============================================================
   // ---------------------------- State -----------------------------
   // ============================================================
@@ -502,6 +533,7 @@
   let categoryItemsCache = {};
   let repairExpanded = new Set();
   let repairItemsCache = {};
+  let scheduleItemsCache = { today: [], tomorrow: [] };
 
   const plantFilterEl = document.getElementById("plantFilter");
   const sectionFilterEl = document.getElementById("sectionFilter");
@@ -514,6 +546,7 @@
   const chartScopeLabelEl = document.getElementById("chartScopeLabel");
   const inspectionNoteEl = document.getElementById("inspectionNote");
   const categoryRowEl = document.getElementById("categoryRow");
+  const scheduleRowEl = document.getElementById("scheduleRow");
 
   function jobKey(j){ return String(j.id); }
 
@@ -523,6 +556,17 @@
     focusedJobId = job.id;
     expandedKeys.add(jobKey(job));
     render();
+  }
+
+  /** ใช้กับการ์ดงานวันนี้/พรุ่งนี้ — เปิดรายละเอียด + โฟกัสกราฟ แล้วเลื่อนหน้าจอลงไปที่แถวงานในตารางด้านล่าง */
+  function focusJobAndScroll(job){
+    // ถ้าตัวกรอง "สถานะ" ซ่อนงานนี้อยู่ ให้ล้างตัวกรองสถานะก่อน ไม่งั้นจะไม่มีแถวให้เลื่อนไปหา
+    if (statusFilterEl.value !== "ALL" && statusOf(job).cls !== statusFilterEl.value) {
+      statusFilterEl.value = "ALL";
+    }
+    focusJob(job);
+    const row = document.querySelector(`#jobTable tr.job-row[data-key="${jobKey(job)}"]`);
+    if (row) row.scrollIntoView({ behavior: "smooth", block: "start" });
   }
 
   function populateFilters(){
@@ -568,6 +612,44 @@
       <div class="kpi-card behind"><div class="value">${behind}</div><div class="label">ล่าช้า</div></div>
     `;
     document.getElementById("jobCountBadge").innerText = `${jobs.length} งาน`;
+  }
+
+  /** การ์ดงานวันนี้ / พรุ่งนี้ — แสดงเฉพาะ TAG ของงานที่มีแผนทำในวันนั้น (ตามขอบเขตที่เลือก) คลิกเพื่อเลื่อนไปดูในตาราง */
+  function renderSchedule(scope){
+    const now = new Date();
+    const y = now.getFullYear(), m = now.getMonth(), d = now.getDate();
+    const days = [
+      { key: "today",    title: "วันนี้",   start: new Date(y, m, d),     end: new Date(y, m, d + 1) },
+      { key: "tomorrow", title: "พรุ่งนี้", start: new Date(y, m, d + 1), end: new Date(y, m, d + 2) },
+    ];
+
+    scheduleRowEl.innerHTML = days.map(day => {
+      const items = scope.filter(j => jobScheduledOnDay(j, day.start, day.end));
+      scheduleItemsCache[day.key] = items;
+      const chips = items.length
+        ? items.map((j, idx) =>
+            `<span class="tag-chip" data-day="${day.key}" data-idx="${idx}" title="${escapeHtml(j.desc)}">${escapeHtml(j.tag || "(ไม่มี TAG)")}</span>`
+          ).join("")
+        : `<div class="category-empty">ไม่มีงานที่มีแผนในวันนี้ตามขอบเขตที่เลือก</div>`;
+      return `
+        <div class="schedule-card">
+          <div class="schedule-head">
+            <div><span class="schedule-title">${day.title}</span><span class="schedule-date">${fmtDate(day.start)}</span></div>
+            <div class="schedule-count">${items.length}<span class="cat-value-total"> งาน</span></div>
+          </div>
+          <div class="schedule-tags">${chips}</div>
+        </div>
+      `;
+    }).join("");
+
+    scheduleRowEl.querySelectorAll(".tag-chip").forEach(el => {
+      el.addEventListener("click", () => {
+        const dayKey = el.getAttribute("data-day");
+        const idx = parseInt(el.getAttribute("data-idx"), 10);
+        const job = (scheduleItemsCache[dayKey] || [])[idx];
+        if (job) focusJobAndScroll(job);
+      });
+    });
   }
 
   function renderCategoryCards(scope){
@@ -944,6 +1026,7 @@
   function render(){
     const { scope, display, plantF, sectionF, typeF } = getScope();
     renderKpis(scope, display);
+    renderSchedule(scope);
     renderCategoryCards(scope);
     renderRepairSummary(scope);
 
