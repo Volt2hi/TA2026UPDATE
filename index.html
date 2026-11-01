@@ -883,8 +883,12 @@
     if (!dated.length) return;
 
     const today = new Date();
-    const minStart = new Date(Math.min(...dated.map(j => j.start.getTime())));
-    const maxEnd = new Date(Math.max(...dated.map(j => j.finish.getTime())));
+    // << แก้: ขอบเขตแกนเวลาดูจากทั้ง Start/Finish ของงาน "และ" ของขั้นตอนย่อย
+    // (Finish ของแถวหัวงานอาจเร็วกว่าขั้นตอนสุดท้าย ทำให้กราฟตัดจบก่อนแผนครบ 100%)
+    const jobStartMs = j => Math.min(j.start.getTime(), ...(j.steps || []).filter(s => s.start).map(s => s.start));
+    const jobEndMs = j => Math.max(j.finish.getTime(), ...(j.steps || []).filter(s => s.finish).map(s => s.finish));
+    const minStart = new Date(Math.min(...dated.map(jobStartMs)));
+    const maxEnd = new Date(Math.max(...dated.map(jobEndMs)));
     const totalDays = Math.max(1, Math.round((maxEnd - minStart) / 86400000));
     const stepDays = totalDays > 60 ? Math.ceil(totalDays / 60) : 1;
 
@@ -900,6 +904,10 @@
 
     const allDatesSet = new Map();
     [...planDates, ...histDates].forEach(d => allDatesSet.set(fmtDate(d), d));
+    // << แก้: จุดสุดท้ายของเส้นแผนต้องเป็นเวลาจบงานจริง ไม่ใช่เวลาเช้าของวันเดียวกัน (ไม่งั้นแผนค้างที่ ~91%)
+    const endKey = fmtDate(maxEnd);
+    const existingEnd = allDatesSet.get(endKey);
+    if (!existingEnd || existingEnd < maxEnd) allDatesSet.set(endKey, maxEnd);
     const allDates = [...allDatesSet.values()].sort((a,b) => a - b);
 
     const labels = allDates.map(d => fmtDate(d));
