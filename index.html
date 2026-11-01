@@ -48,22 +48,29 @@
   .kpi-card.ahead .value{color:var(--green);}
   .kpi-card.ontrack .value{color:var(--teal);}
   .kpi-card.behind .value{color:var(--red);}
-  .schedule-row{display:flex; gap:12px; flex-wrap:wrap; margin-bottom:18px;}
-  .schedule-card{
-    background:var(--panel); border:1px solid var(--border); border-radius:10px;
-    padding:14px 16px; flex:1 1 320px; min-width:260px;
+  .top-layout{display:flex; gap:18px; align-items:flex-start; flex-wrap:wrap;}
+  .top-left{flex:1 1 480px; min-width:300px;}
+  .calendar-panel{
+    flex:0 0 310px; background:var(--panel); border:1px solid var(--border);
+    border-radius:10px; padding:12px 14px; margin-bottom:16px;
   }
-  .schedule-head{display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;}
-  .schedule-title{font-size:12.5px; font-weight:600;}
-  .schedule-date{font-size:10.5px; color:var(--muted); font-weight:400; margin-left:6px;}
-  .schedule-count{font-size:22px; font-weight:700; color:var(--teal);}
-  .schedule-tags{display:flex; flex-wrap:wrap; gap:6px; max-height:150px; overflow-y:auto;}
-  .tag-chip{
-    display:inline-block; font-size:11.5px; font-weight:700; color:var(--teal);
-    background:var(--panel2); border:1px solid var(--border); border-radius:999px;
-    padding:3px 10px; cursor:pointer; white-space:nowrap;
+  .cal-head{display:flex; align-items:center; justify-content:space-between; gap:6px; margin-bottom:6px;}
+  .cal-title{font-size:13px; font-weight:600;}
+  .cal-nav{display:flex; gap:4px; align-items:center;}
+  .cal-nav button{padding:4px 9px; font-size:12px;}
+  .cal-hint{font-size:10.5px; color:var(--muted); margin-bottom:8px;}
+  .cal-grid{display:grid; grid-template-columns:repeat(7, 1fr); gap:2px; text-align:center;}
+  .cal-dow{font-size:10px; color:var(--muted); padding:2px 0;}
+  .cal-cell{height:32px; display:flex; align-items:center; justify-content:center;}
+  .cal-num{
+    display:inline-flex; align-items:center; justify-content:center; width:27px; height:27px;
+    border-radius:50%; font-size:11.5px; color:var(--muted); border:2px solid transparent;
   }
-  .tag-chip:hover{ background:#123038; border-color:var(--teal); }
+  .cal-cell.today .cal-num{color:var(--amber); font-weight:700;}
+  .cal-cell.has-work .cal-num{border-color:var(--teal); color:var(--text); font-weight:700; cursor:pointer;}
+  .cal-cell.has-work .cal-num:hover{background:#123038;}
+  .cal-cell.selected .cal-num{background:var(--teal); border-color:var(--teal); color:#062a26;}
+  .cal-day-list-title{font-size:11.5px; color:var(--muted); margin-top:10px;}
   .category-row{display:flex; gap:12px; flex-wrap:wrap; margin-bottom:18px;}
   .category-card{
     background:var(--panel); border:1px solid var(--border); border-radius:10px;
@@ -191,6 +198,8 @@
 </style>
 </head>
 <body>
+  <div class="top-layout">
+  <div class="top-left">
   <h1>Turnaround Progress Dashboard</h1>
   <div class="caption">
     <span><span class="status-dot" id="statusDot"></span><span id="lastUpdated">กำลังโหลดข้อมูล...</span></span>
@@ -227,9 +236,10 @@
       </select>
     </div>
   </div>
+  </div>
+  <div class="calendar-panel" id="calendarPanel"></div>
+  </div>
   <div class="kpi-row" id="kpiRow"></div>
-  <h3>งานวันนี้ / พรุ่งนี้ <span style="font-weight:400;color:var(--muted);font-size:11.5px;">— ตามขอบเขตที่เลือก (คลิก TAG เพื่อไปดูรายละเอียดในตารางด้านล่าง)</span></h3>
-  <div class="schedule-row" id="scheduleRow"></div>
   <h3>สรุปตามหมวดงาน (แยกจากสีพื้นหลังคอลัมน์ Description) <span style="font-weight:400;color:var(--muted);font-size:11.5px;">— นับไม่ซ้ำ TAG</span></h3>
   <div class="category-row" id="categoryRow"></div>
   <div class="chart-section-row">
@@ -533,7 +543,10 @@
   let categoryItemsCache = {};
   let repairExpanded = new Set();
   let repairItemsCache = {};
-  let scheduleItemsCache = { today: [], tomorrow: [] };
+  const _nowInit = new Date();
+  let calMonth = new Date(_nowInit.getFullYear(), _nowInit.getMonth(), 1);
+  let calSelectedDay = null; // "yyyy-mm-dd" ของวันที่กดเปิด dropdown
+  let calDayItems = [];
 
   const plantFilterEl = document.getElementById("plantFilter");
   const sectionFilterEl = document.getElementById("sectionFilter");
@@ -546,7 +559,7 @@
   const chartScopeLabelEl = document.getElementById("chartScopeLabel");
   const inspectionNoteEl = document.getElementById("inspectionNote");
   const categoryRowEl = document.getElementById("categoryRow");
-  const scheduleRowEl = document.getElementById("scheduleRow");
+  const calendarPanelEl = document.getElementById("calendarPanel");
 
   function jobKey(j){ return String(j.id); }
 
@@ -614,43 +627,95 @@
     document.getElementById("jobCountBadge").innerText = `${jobs.length} งาน`;
   }
 
-  /** การ์ดงานวันนี้ / พรุ่งนี้ — แสดงเฉพาะ TAG ของงานที่มีแผนทำในวันนั้น (ตามขอบเขตที่เลือก) คลิกเพื่อเลื่อนไปดูในตาราง */
-  function renderSchedule(scope){
+  const THAI_MONTHS = ["มกราคม","กุมภาพันธ์","มีนาคม","เมษายน","พฤษภาคม","มิถุนายน","กรกฎาคม","สิงหาคม","กันยายน","ตุลาคม","พฤศจิกายน","ธันวาคม"];
+  const THAI_DOW = ["อา","จ","อ","พ","พฤ","ศ","ส"];
+
+  /** ปฏิทินงาน — วงกลมรอบวันที่ที่มีงาน (ตามขอบเขตที่เลือก) กดเลขวันที่เพื่อเปิดรายการ TAG ของวันนั้น
+   *  กด TAG เพื่อเปิดรายละเอียด + โฟกัสกราฟ + เลื่อนไปที่แถวในตารางด้านล่าง */
+  function renderCalendar(scope){
+    const y = calMonth.getFullYear(), m = calMonth.getMonth();
+    const daysInMonth = new Date(y, m + 1, 0).getDate();
+    const firstDow = new Date(y, m, 1).getDay();
     const now = new Date();
-    const y = now.getFullYear(), m = now.getMonth(), d = now.getDate();
-    const days = [
-      { key: "today",    title: "วันนี้",   start: new Date(y, m, d),     end: new Date(y, m, d + 1) },
-      { key: "tomorrow", title: "พรุ่งนี้", start: new Date(y, m, d + 1), end: new Date(y, m, d + 2) },
-    ];
+    const todayKey = fmtDate(new Date(now.getFullYear(), now.getMonth(), now.getDate()));
 
-    scheduleRowEl.innerHTML = days.map(day => {
-      const items = scope.filter(j => jobScheduledOnDay(j, day.start, day.end));
-      scheduleItemsCache[day.key] = items;
-      const chips = items.length
-        ? items.map((j, idx) =>
-            `<span class="tag-chip" data-day="${day.key}" data-idx="${idx}" title="${escapeHtml(j.desc)}">${escapeHtml(j.tag || "(ไม่มี TAG)")}</span>`
-          ).join("")
-        : `<div class="category-empty">ไม่มีงานที่มีแผนในวันนี้ตามขอบเขตที่เลือก</div>`;
-      return `
-        <div class="schedule-card">
-          <div class="schedule-head">
-            <div><span class="schedule-title">${day.title}</span><span class="schedule-date">${fmtDate(day.start)}</span></div>
-            <div class="schedule-count">${items.length}<span class="cat-value-total"> งาน</span></div>
-          </div>
-          <div class="schedule-tags">${chips}</div>
-        </div>
-      `;
-    }).join("");
+    const itemsByDay = {};
+    for (let d = 1; d <= daysInMonth; d++){
+      const ds = new Date(y, m, d), de = new Date(y, m, d + 1);
+      const items = scope.filter(j => jobScheduledOnDay(j, ds, de));
+      if (items.length) itemsByDay[fmtDate(ds)] = items;
+    }
 
-    scheduleRowEl.querySelectorAll(".tag-chip").forEach(el => {
-      el.addEventListener("click", () => {
-        const dayKey = el.getAttribute("data-day");
-        const idx = parseInt(el.getAttribute("data-idx"), 10);
-        const job = (scheduleItemsCache[dayKey] || [])[idx];
-        if (job) focusJobAndScroll(job);
-      });
-    });
+    if (calSelectedDay && !itemsByDay[calSelectedDay]) calSelectedDay = null;
+    calDayItems = calSelectedDay ? itemsByDay[calSelectedDay] : [];
+
+    let cells = "";
+    for (let i = 0; i < firstDow; i++) cells += '<div class="cal-cell"></div>';
+    for (let d = 1; d <= daysInMonth; d++){
+      const key = fmtDate(new Date(y, m, d));
+      const items = itemsByDay[key];
+      const cls = ["cal-cell"];
+      if (key === todayKey) cls.push("today");
+      if (items) cls.push("has-work");
+      if (key === calSelectedDay) cls.push("selected");
+      const attrs = items ? ` data-cal-day="${key}" title="${items.length} งาน"` : "";
+      cells += `<div class="${cls.join(" ")}"><span class="cal-num"${attrs}>${d}</span></div>`;
+    }
+
+    let dropdown = "";
+    if (calSelectedDay){
+      const [sy, sm, sd] = calSelectedDay.split("-").map(Number);
+      dropdown = `<div class="cal-day-list-title">${sd} ${THAI_MONTHS[sm - 1]} ${sy} — ${calDayItems.length} งาน</div>
+        <div class="category-list">` +
+        calDayItems.map((j, idx) =>
+          `<div class="category-list-item" data-cal-job="${idx}" title="${escapeHtml(j.desc)}"><span class="cli-tag">${escapeHtml(j.tag || "(ไม่มี TAG)")}</span></div>`
+        ).join("") + `</div>`;
+    }
+
+    calendarPanelEl.innerHTML = `
+      <div class="cal-head">
+        <span class="cal-title">${THAI_MONTHS[m]} ${y}</span>
+        <span class="cal-nav">
+          <button class="secondary" data-cal-nav="-1" title="เดือนก่อนหน้า">‹</button>
+          <button class="secondary" data-cal-nav="today">วันนี้</button>
+          <button class="secondary" data-cal-nav="1" title="เดือนถัดไป">›</button>
+        </span>
+      </div>
+      <div class="cal-hint">วงกลม = วันที่มีงาน (ตามขอบเขตที่เลือก) — กดเลขวันที่เพื่อดู TAG</div>
+      <div class="cal-grid">
+        ${THAI_DOW.map(w => `<div class="cal-dow">${w}</div>`).join("")}
+        ${cells}
+      </div>
+      ${dropdown}
+    `;
   }
+
+  calendarPanelEl.addEventListener("click", (e) => {
+    const navBtn = e.target.closest("[data-cal-nav]");
+    if (navBtn){
+      const v = navBtn.getAttribute("data-cal-nav");
+      if (v === "today"){
+        const n = new Date();
+        calMonth = new Date(n.getFullYear(), n.getMonth(), 1);
+      } else {
+        calMonth = new Date(calMonth.getFullYear(), calMonth.getMonth() + parseInt(v, 10), 1);
+      }
+      renderCalendar(getScope().scope);
+      return;
+    }
+    const dayEl = e.target.closest("[data-cal-day]");
+    if (dayEl){
+      const key = dayEl.getAttribute("data-cal-day");
+      calSelectedDay = (calSelectedDay === key) ? null : key;
+      renderCalendar(getScope().scope);
+      return;
+    }
+    const jobEl = e.target.closest("[data-cal-job]");
+    if (jobEl){
+      const job = calDayItems[parseInt(jobEl.getAttribute("data-cal-job"), 10)];
+      if (job) focusJobAndScroll(job);
+    }
+  });
 
   function renderCategoryCards(scope){
     const itemsByCategory = flattenCategoryItems(scope);
@@ -1026,7 +1091,7 @@
   function render(){
     const { scope, display, plantF, sectionF, typeF } = getScope();
     renderKpis(scope, display);
-    renderSchedule(scope);
+    renderCalendar(scope);
     renderCategoryCards(scope);
     renderRepairSummary(scope);
 
